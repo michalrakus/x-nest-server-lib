@@ -1,0 +1,18 @@
+/* vytvorene podla XDevNestServerApp, poznamka: asi netreba mat v "exclude" napr. "node_modules", ked pouzivame "include" */
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "declaration": true,
+    "removeComments": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "es2017",
+    "sourceMap": true,
+    "outDir": "./lib",
+    "baseUrl": "./",
+    "incremental": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "test", "lib", "**/*spec.ts"]
+}

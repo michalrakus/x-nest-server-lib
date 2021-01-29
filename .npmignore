@@ -1,0 +1,4 @@
+# adresare a subory ktore nechceme poslat do npm
+# nema velky vyznam - do npm sa posielaju subory urcene cez "files" v package.json
+node_modules/
+.idea/

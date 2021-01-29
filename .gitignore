@@ -1,0 +1,3 @@
+node_modules
+# Typescript sa sem kompiluje do ES5 (/ znamena ignoruj iba lib v root adresari)
+/lib
