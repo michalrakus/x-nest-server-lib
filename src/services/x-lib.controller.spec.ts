@@ -1,15 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Pokus1Controller } from './pokus1.controller';
+import { XLibController } from './x-lib.controller';
 
-describe('Pokus1Controller', () => {
-  let controller: Pokus1Controller;
+describe('XLibController', () => {
+  let controller: XLibController;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [Pokus1Controller],
+      controllers: [XLibController],
     }).compile();
 
-    controller = module.get<Pokus1Controller>(Pokus1Controller);
+    controller = module.get<XLibController>(XLibController);
   });
 
   it('should be defined', () => {

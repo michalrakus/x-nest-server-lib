@@ -5,10 +5,10 @@ import {Filters, FindParam, SortMeta} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 
 @Injectable()
-export class LazyDataTableService {
+export class XLazyDataTableService {
 
     async findRows(findParam : FindParam): Promise<FindResult> {
-        console.log("LazyDataTableService.findRows findParam = " + JSON.stringify(findParam));
+        //console.log("LazyDataTableService.findRows findParam = " + JSON.stringify(findParam));
 
         // TODO - optimalizacia - leftJoin-y sa mozu nahradit za join-y, ak je ManyToOne asociacia not null (join-y su rychlejsie ako leftJoin-y)
 
@@ -30,7 +30,7 @@ export class LazyDataTableService {
 
         const { count } = await selectQueryBuilder.getRawOne();
 
-        console.log("Pokus1Service.readLazyDataTable count = " + count);
+        //console.log("XLazyDataTableService.readLazyDataTable count = " + count);
 
         const selectItems: string[] = this.createSelectItems(rootAlias, findParam.fields, assocMap);
         const orderByCondition : OrderByCondition = this.createOrderByCondition(rootAlias, findParam.multiSortMeta, assocMap);

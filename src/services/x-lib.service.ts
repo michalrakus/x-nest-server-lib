@@ -6,7 +6,7 @@ import {
     SelectQueryBuilder
 } from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
-import {EntityMetadataService} from "./entity-metadata.service";
+import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XAssocMap, XEntity} from "../serverApi/XEntityMetadata";
 import {XUser} from "../administration/xuser.entity";
 import {XUserAuthenticationRequest, XUserAuthenticationResponse} from "../serverApi/XUserAuthenticationIfc";
@@ -16,10 +16,10 @@ import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
 
 @Injectable()
-export class Pokus1Service {
+export class XLibService {
 
     constructor(
-        private readonly entityMetadataService: EntityMetadataService
+        private readonly xEntityMetadataService: XEntityMetadataService
     ) {}
 
     async findRowsForAssoc(findParamRows : FindParamRowsForAssoc): Promise<any[]> {
@@ -50,10 +50,10 @@ export class Pokus1Service {
     async saveRow(row: SaveRowParam) {
         //console.log('sme v Pokus1Service.saveRow');
 
-        const xEntity: XEntity = this.entityMetadataService.getXEntity(row.entity);
+        const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
         const assocMap: XAssocMap = xEntity.assocToManyMap;
         for (const [assocName, assoc] of Object.entries(assocMap)) {
-            const xChildEntity: XEntity = this.entityMetadataService.getXEntity(assoc.entityName);
+            const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
             // uprava toho co prislo z klienta - vynullujeme umelo vytvorene id-cka
             // (robime to tu a nie na klientovi, lebo ak nam nezbehne save, tak formular zostava otvoreny)
@@ -71,7 +71,7 @@ export class Pokus1Service {
             // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
             // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
             for (const [assocName, assoc] of Object.entries(assocMap)) {
-                const xChildEntity: XEntity = this.entityMetadataService.getXEntity(assoc.entityName);
+                const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
                 const idList: any[] = [];
                 const childRowList = row.object[assoc.name];

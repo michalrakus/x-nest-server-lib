@@ -1,15 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { Pokus1Service } from './pokus1.service';
+import { XLibService } from './x-lib.service';
 
-describe('Pokus1Service', () => {
-  let service: Pokus1Service;
+describe('XLibService', () => {
+  let service: XLibService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [Pokus1Service],
+      providers: [XLibService],
     }).compile();
 
-    service = module.get<Pokus1Service>(Pokus1Service);
+    service = module.get<XLibService>(XLibService);
   });
 
   it('should be defined', () => {

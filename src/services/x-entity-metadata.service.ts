@@ -1,20 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import {XAssocMap, XEntity, XEntityMap, XFieldMap} from "../serverApi/XEntityMetadata";
-import {EntityMetadata, getRepository, Repository} from "typeorm";
+import {EntityMetadata, EntitySchema, getRepository, Repository} from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
 import {ColumnMetadata} from "typeorm/metadata/ColumnMetadata";
-//import {entitiesList} from "../app.module";
 
 @Injectable()
-export class EntityMetadataService {
+export class XEntityMetadataService {
 
-    // docasne takto
-    entitiesList: string[] = ["XUser", "Car", "Brand", "Drive", "Country"];
+    private entityList: (string | Function | EntitySchema<any>)[];
+
+    constructor(entityList: (string | Function | EntitySchema<any>)[]) {
+        this.entityList = entityList;
+    }
 
     getXEntityMap(): XEntityMap {
-        // POZOR! v tejto metode pouzivame globalnu konstantu entitiesList - nevedel som ziskat zoznam entit z metadat
         const xEntityMap: XEntityMap = {};
-        for (const entity of this.entitiesList) {
+        for (const entity of this.entityList) {
             const repository = getRepository(entity);
             const xEntity: XEntity = this.getXEntityForRepository(repository);
             xEntityMap[xEntity.name] = xEntity;

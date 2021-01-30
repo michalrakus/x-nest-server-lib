@@ -14,11 +14,11 @@ function generateApi(cb) {
 
     const apiFileList = [
         "./lib/administration/xuser.entity",
-        //"./lib/services/entity-metadata.service",
-        //"./lib/services/lazy-data-table.service",
-        //"./lib/services/pokus1.service",
-        //"./lib/services/pokus1.controller",
-        "./lib/services/pokus1.module"
+        //"./lib/services/x-entity-metadata.service",
+        //"./lib/services/x-lazy-data-table.service",
+        //"./lib/services/x-lib.service",
+        //"./lib/services/x-lib.controller",
+        "./lib/services/x-lib.module"
     ];
 
     for (const apiFile of apiFileList) {
