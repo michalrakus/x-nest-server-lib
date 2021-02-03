@@ -24,8 +24,7 @@ export class XLibController {
         await this.xLibService.checkAuthentication(headerAuth);
 
         const findResult: FindResult = await this.xLazyDataTableService.findRows(body);
-        const response: Promise<FindResult> = Promise.resolve(findResult);
-        return response;
+        return findResult;
     }
 
     @Post('findRowsForAssoc')
@@ -43,31 +42,31 @@ export class XLibController {
     @Post('findRowById')
     async findRowById(@Body() body: FindRowByIdParam, @Headers('Authorization') headerAuth: string): Promise<any> {
         await this.xLibService.checkAuthentication(headerAuth);
-        return this.xLazyDataTableService.findRowById(body);
+        return await this.xLazyDataTableService.findRowById(body);
     }
 
     @Post('addRow')
     async addRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string) {
         await this.xLibService.checkAuthentication(headerAuth);
-        this.xLibService.addRow(body);
+        await this.xLibService.addRow(body);
     }
 
     @Post('saveRow')
     async saveRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string) {
         await this.xLibService.checkAuthentication(headerAuth);
-        this.xLibService.saveRow(body);
+        await this.xLibService.saveRow(body);
     }
 
     @Post('removeRow')
     async removeRow(@Body() body: RemoveRowParam, @Headers('Authorization') headerAuth: string) {
         await this.xLibService.checkAuthentication(headerAuth);
-        this.xLibService.removeRow(body);
+        await this.xLibService.removeRow(body);
     }
 
     @Post('userAuthentication')
-    userAuthentication(@Body() body: XUserAuthenticationRequest, @Headers('Authorization') headerAuth: string): Promise<XUserAuthenticationResponse> {
+    async userAuthentication(@Body() body: XUserAuthenticationRequest, @Headers('Authorization') headerAuth: string): Promise<XUserAuthenticationResponse> {
         this.xLibService.checkAuthenticationPublic(headerAuth);
-        return this.xLibService.userAuthentication(body);
+        return await this.xLibService.userAuthentication(body);
     }
 
     @Post('getXEntityMap')

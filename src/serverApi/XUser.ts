@@ -3,5 +3,4 @@ export interface XUser {
     username: string;
     password: string;
     name: string;
-    [field: string]: any;
 }
