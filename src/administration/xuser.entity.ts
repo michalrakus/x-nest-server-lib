@@ -6,12 +6,12 @@ export class XUser {
     @PrimaryGeneratedColumn({name: 'id_x_user'})
     idXUser: number;
 
-    @Column({length: 64})
+    @Column({length: 64, nullable: false})
     username: string;
 
-    @Column({length: 64})
+    @Column({length: 64, nullable: false})
     password: string;
 
-    @Column({length: 128})
+    @Column({length: 128, nullable: false})
     name: string;
 }
