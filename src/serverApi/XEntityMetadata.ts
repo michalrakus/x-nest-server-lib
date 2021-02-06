@@ -25,6 +25,7 @@ export interface XField {
     length?: number;
     precision?: number;
     scale?: number;
+    width?: number;
 }
 
 export interface XAssoc {

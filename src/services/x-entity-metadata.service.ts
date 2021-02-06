@@ -40,9 +40,14 @@ export class XEntityMetadataService {
             let type = "unknown"; // default
             if (typeof columnMetadata.type === "string") {
                 type = columnMetadata.type;
+                // nech nemame na klientovi milion vseliakych databazovych typov, tak si prehodime niektore typy na javascript-ove, t.j. napr. string, number
+                if (type === "int") {
+                    type = "number";
+                }
             }
             else if (typeof columnMetadata.type === "function") {
-                // columnMetadata.type.toString() vracia napr. "function String() { [native code] }"
+                // ak nezapiseme do dekoratora @Column atribut type, zbieha tato vetva a ziskame typ atributu (string, number, ...) (plati napr. pre id-cka)
+                // columnMetadata.type.toString() vracia napr. "function String() { [native code] }", resp. "function Number() { [native code] }"
                 // vytiahneme odtial String
                 const typeString: string = columnMetadata.type.toString();
                 const parenthesePos = typeString.indexOf("()");
@@ -54,8 +59,12 @@ export class XEntityMetadataService {
             if (isNaN(length)) {
                 length = undefined;
             }
+            let width: number = columnMetadata.width; // Podla dokumentacie sa width pouziva pri MySql (pri stlpci int). Ale v principe, co si tam zapiseme to tam bude. Ak nic nezapiseme, tak tam bude undefined.
+            if (type === "number" && width === undefined) {
+                width = 11; // tychto 11 je default pre int stlpce v MySql, pre ine databazy to nemusi platit
+            }
             fieldMap[fieldName] = {name: fieldName, type: type, isNullable: columnMetadata.isNullable,
-                                    length: length, precision: columnMetadata.precision, scale: columnMetadata.scale};
+                                    length: length, precision: columnMetadata.precision, scale: columnMetadata.scale, width: width};
         }
 
         columnMetadataList = entityMetadata.primaryColumns;
