@@ -12,7 +12,7 @@ CREATE TABLE x_browse_meta (
 	id_x_browse_meta int NOT NULL auto_increment,
     entity varchar(64) NOT NULL,
     browse_id varchar(64),
-    rows int(6),
+    `rows` int(6),
 	PRIMARY KEY (id_x_browse_meta)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
 
