@@ -14,6 +14,8 @@ function generateApi(cb) {
 
     const apiFileList = [
         "./lib/administration/xuser.entity",
+        "./lib/administration/x-browse-meta.entity",
+        "./lib/administration/x-column-meta.entity",
         //"./lib/services/x-entity-metadata.service",
         //"./lib/services/x-lazy-data-table.service",
         //"./lib/services/x-lib.service",

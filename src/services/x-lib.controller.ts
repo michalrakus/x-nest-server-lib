@@ -10,13 +10,16 @@ import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
+import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
+import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 
 @Controller()
 export class XLibController {
     constructor(
         private readonly xLibService: XLibService,
         private readonly xLazyDataTableService: XLazyDataTableService,
-        private readonly xEntityMetadataService: XEntityMetadataService) {}
+        private readonly xEntityMetadataService: XEntityMetadataService,
+        private readonly xBrowseFormMetadataService: XBrowseFormMetadataService) {}
 
     @Post('lazyDataTableFindRows')
     async lazyDataTableFindRows(@Body() body: FindParam, @Headers('Authorization') headerAuth: string): Promise<FindResult> {
@@ -45,12 +48,6 @@ export class XLibController {
         return await this.xLazyDataTableService.findRowById(body);
     }
 
-    @Post('addRow')
-    async addRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string) {
-        await this.xLibService.checkAuthentication(headerAuth);
-        await this.xLibService.addRow(body);
-    }
-
     @Post('saveRow')
     async saveRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string) {
         await this.xLibService.checkAuthentication(headerAuth);
@@ -74,5 +71,12 @@ export class XLibController {
         console.log("************************* zavolany getXEntityMap *******************************************");
         await this.xLibService.checkAuthentication(headerAuth);
         return this.xEntityMetadataService.getXEntityMap();
+    }
+
+    @Post('getXBrowseMetaMap')
+    async getXBrowseMetaMap(@Body() body: any, @Headers('Authorization') headerAuth: string): Promise<XBrowseMetaMap> {
+        console.log("*********************** zavolany getXBrowseMetaMap *****************************************");
+        await this.xLibService.checkAuthentication(headerAuth);
+        return this.xBrowseFormMetadataService.getXBrowseMetaMap();
     }
 }

@@ -39,16 +39,10 @@ export class XLibService {
         return rows;
     }
 
-    async addRow(row: SaveRowParam) {
-        //console.log('sme v Pokus1Service.addRow');
-
-        // TODO - ak TypeORM/DB neposkytuje kaskadny insert, dorobit aj ten (asi len pre prvu uroven)
-        const repository = getRepository(row.entity);
-        await repository.save(row.object);
-    }
-
     async saveRow(row: SaveRowParam) {
-        //console.log('sme v Pokus1Service.saveRow');
+
+        // saveRow sluzi aj pre insert (id-cko je undefined, TypeORM robi rovno insert)
+        // aj pre update (id-cko je cislo, TypeORM najprv cez select zistuje ci dany zaznam existuje)
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
         const assocMap: XAssocMap = xEntity.assocToManyMap;
@@ -61,44 +55,50 @@ export class XLibService {
             const childRowList = row.object[assoc.name];
             for (const childRow of childRowList) {
                 if (childRow.__x_generatedRowId) {
-                    childRow[xChildEntity.idField] = null;
+                    // undefined v id-cku sposobi, ze sa priamo vykona INSERT
+                    // (netestuje sa ci zaznam uz existuje v DB (ako je tomu pri null alebo inej ciselnej hodnote))
+                    // kaskadny insert/update potom pekne zafunguje
+                    childRow[xChildEntity.idField] = undefined;
                 }
             }
         }
 
         // vsetky db operacie dame do jednej transakcie
         await getManager().transaction(async manager => {
-            // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
-            // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
-            for (const [assocName, assoc] of Object.entries(assocMap)) {
-                const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
+            const rowId = row.object[xEntity.idField];
+            if (rowId !== undefined) {
+                // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
+                // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
+                for (const [assocName, assoc] of Object.entries(assocMap)) {
+                    const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
-                const idList: any[] = [];
-                const childRowList = row.object[assoc.name];
-                for (const childRow of childRowList) {
-                    const id = childRow[xChildEntity.idField];
-                    if (id !== null && id !== undefined) {
-                        idList.push(id);
+                    const idList: any[] = [];
+                    const childRowList = row.object[assoc.name];
+                    for (const childRow of childRowList) {
+                        const id = childRow[xChildEntity.idField];
+                        if (id !== null && id !== undefined) {
+                            idList.push(id);
+                        }
                     }
-                }
 
-                if (assoc.inverseAssocName === undefined) {
-                    throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
+                    if (assoc.inverseAssocName === undefined) {
+                        throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
+                    }
+                    const repository = manager.getRepository(xChildEntity.name);
+                    const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
+                    selectQueryBuilder.innerJoin(`t0.${assoc.inverseAssocName}`, "t1");
+                    selectQueryBuilder.where(`t1.${xEntity.idField} = :rowId`, {rowId: rowId});
+                    if (idList.length > 0) {
+                        selectQueryBuilder.andWhere(`t0.${xChildEntity.idField} NOT IN (:...idList)`, {idList: idList});
+                    }
+                    const rowList: any[] = await selectQueryBuilder.getMany();
+                    //console.log("Nasli sme na zrusenie:" + rowList.length);
+                    //console.log(rowList);
+                    await repository.remove(rowList);
                 }
-                const repository = manager.getRepository(xChildEntity.name);
-                const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
-                selectQueryBuilder.innerJoin(`t0.${assoc.inverseAssocName}`, "t1");
-                selectQueryBuilder.where(`t1.${xEntity.idField} = :idObject`, {idObject: row.object[xEntity.idField]});
-                if (idList.length > 0) {
-                    selectQueryBuilder.andWhere(`t0.${xChildEntity.idField} NOT IN (:...idList)`, {idList: idList});
-                }
-                const rowList: any[] = await selectQueryBuilder.getMany();
-                //console.log("Nasli sme na zrusenie:" + rowList.length);
-                //console.log(rowList);
-                await repository.remove(rowList);
             }
 
-            // samotny update entity
+            // samotny insert/update entity
             const repository = manager.getRepository(row.entity);
             //console.log(row.object);
             //const date = row.object.carDate;
