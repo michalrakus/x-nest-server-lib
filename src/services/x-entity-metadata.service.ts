@@ -1,29 +1,36 @@
 import { Injectable } from '@nestjs/common';
-import {XAssocMap, XEntity, XEntityMap, XFieldMap} from "../serverApi/XEntityMetadata";
+import {XAssoc, XAssocMap, XEntity, XEntityMap, XField, XFieldMap} from "../serverApi/XEntityMetadata";
 import {EntityMetadata, EntitySchema, getRepository, Repository} from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
 import {ColumnMetadata} from "typeorm/metadata/ColumnMetadata";
+import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 
 @Injectable()
 export class XEntityMetadataService {
 
     private entityList: (string | Function | EntitySchema<any>)[];
 
+    // nacachovane metadata
+    private xEntityMap: XEntityMap;
+
     constructor(entityList: (string | Function | EntitySchema<any>)[]) {
         this.entityList = entityList;
     }
 
     getXEntityMap(): XEntityMap {
-        const xEntityMap: XEntityMap = {};
-        for (const entity of this.entityList) {
-            const repository = getRepository(entity);
-            const xEntity: XEntity = this.getXEntityForRepository(repository);
-            xEntityMap[xEntity.name] = xEntity;
+        if (this.xEntityMap === undefined) {
+            this.xEntityMap = {};
+            for (const entity of this.entityList) {
+                const repository = getRepository(entity);
+                const xEntity: XEntity = this.getXEntityForRepository(repository);
+                this.xEntityMap[xEntity.name] = xEntity;
+            }
         }
-        return xEntityMap;
+        return this.xEntityMap;
     }
 
-    getXEntity(entity: string): XEntity {
+    // @Deprecated - treba pouzivat getXEntity a neskor zrusit
+    getXEntityOld(entity: string): XEntity {
         const repository = getRepository(entity);
         return this.getXEntityForRepository(repository);
     }
@@ -87,5 +94,80 @@ export class XEntityMetadataService {
             assocMap[assocName] = ({name: assocName, entityName: relationMetadata.inverseEntityMetadata.name, inverseAssocName: inverseAssoc});
         }
         return assocMap;
+    }
+
+    // *** metody odtialto su ekvivalentne metodam na klientovi v triede XUtilsMetadata.ts ***
+
+    getXEntity(entity: string): XEntity {
+        const xEntityMap: XEntityMap = this.getXEntityMap();
+        const xEntity: XEntity = xEntityMap[entity];
+        if (xEntity === undefined) {
+            throw `Entity ${entity} was not found in entity metadata`;
+        }
+        return xEntity;
+    }
+
+    getXField(xEntity: XEntity, field: string): XField {
+        // TODO - pozor, vo fieldMap su aj asociacie, trebalo by zmenit vytvaranie metadat tak aby tam tie asociacie neboli
+        const xField: XField = xEntity.fieldMap[field];
+        if (xField === undefined) {
+            throw `Field ${field} was not found in entity ${xEntity.name}`;
+        }
+        return xField;
+    }
+
+    getXFieldByPath(xEntity: XEntity, path: string): XField {
+        const [field, restPath] = XUtilsCommon.getFieldAndRestPath(path);
+        if (restPath === null) {
+            return this.getXField(xEntity, field);
+        }
+        else {
+            const xAssoc: XAssoc = this.getXAssocToOne(xEntity, field);
+            const xAssocEntity = this.getXEntity(xAssoc.entityName);
+            return this.getXFieldByPath(xAssocEntity, restPath);
+        }
+    }
+
+    getXFieldByPathStr(entity: string, path: string): XField {
+        return this.getXFieldByPath(this.getXEntity(entity), path);
+    }
+
+    getXAssocToOne(xEntity: XEntity, assocField: string): XAssoc {
+        return this.getXAssoc(xEntity, xEntity.assocToOneMap, assocField);
+    }
+
+    getXAssocToMany(xEntity: XEntity, assocField: string): XAssoc {
+        return this.getXAssoc(xEntity, xEntity.assocToManyMap, assocField);
+    }
+
+    getXEntityForAssocToOne(xEntity: XEntity, assocField: string): XEntity {
+        return this.getXEntityForAssoc(this.getXAssocToOne(xEntity, assocField));
+    }
+
+    getXEntityForAssocToMany(xEntity: XEntity, assocField: string): XEntity {
+        return this.getXEntityForAssoc(this.getXAssocToMany(xEntity, assocField));
+    }
+
+    getXFieldList(xEntity: XEntity): XField[] {
+        const xFieldList: XField[] = [];
+        for (const [key, xField] of Object.entries(xEntity.fieldMap)) {
+            // assoc fieldy sa nachadzaju aj v xEntity.fieldMap ako typ number (netusim preco), preto ich vyfiltrujeme
+            if (xEntity.assocToOneMap[xField.name] === undefined) {
+                xFieldList.push(xField);
+            }
+        }
+        return xFieldList;
+    }
+
+    private getXAssoc(xEntity: XEntity, assocMap: XAssocMap, assocField: string): XAssoc {
+        const xAssoc: XAssoc = assocMap[assocField];
+        if (xAssoc === undefined) {
+            throw `Assoc ${assocField} was not found in entity = ${xEntity.name}`;
+        }
+        return xAssoc;
+    }
+
+    private getXEntityForAssoc(xAssoc: XAssoc): XEntity {
+        return this.getXEntity(xAssoc.entityName);
     }
 }

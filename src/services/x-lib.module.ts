@@ -21,6 +21,11 @@ export class XLibModule {
           {provide: XEntityMetadataService, useValue: new XEntityMetadataService(typeOrmModuleOptions.entities)},
           XBrowseFormMetadataService
       ],
+        // servisy ktore su dostupne v inych moduloch
+        exports: [
+            XLibService,
+            XLazyDataTableService
+        ],
       module: XLibModule
     };
   }

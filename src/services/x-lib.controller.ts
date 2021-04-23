@@ -1,4 +1,4 @@
-import {Body, Headers, Controller, Post} from '@nestjs/common';
+import {Body, Headers, Controller, Post, Res, HttpStatus} from '@nestjs/common';
 import {XLibService} from "./x-lib.service";
 import {FindResult} from "../serverApi/FindResult";
 import {XLazyDataTableService} from "./x-lazy-data-table.service";
@@ -12,6 +12,8 @@ import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
 import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
+import {Response} from 'express';
+import {ExportParam} from "../serverApi/ExportImportParam";
 
 @Controller()
 export class XLibController {
@@ -28,6 +30,23 @@ export class XLibController {
 
         const findResult: FindResult = await this.xLazyDataTableService.findRows(body);
         return findResult;
+    }
+
+    @Post('lazyDataTableExport')
+    async lazyDataTableExport(@Body() body: ExportParam, @Headers('Authorization') headerAuth: string, @Res() res: Response) {
+        await this.xLibService.checkAuthentication(headerAuth);
+
+        // toto je pouzitie express-u (nizsia vrstva ako nestjs) - Response je z express-u
+        // viac na https://docs.nestjs.com/controllers#getting-up-and-running
+        // je potrebne menezovat response explicitne
+
+        // response menezujeme explicitne, lebo chceme data do responsu streamovat
+        // kod je spraveny podla:
+        // https://medium.com/developers-arena/streams-piping-and-their-error-handling-in-nodejs-c3fd818530b6
+        // netusim, ci sa tym nepreplni pamet... zostane metoda write stat ak klient neodobera data?
+
+        // metoda export zapisuje do "res"
+        await this.xLazyDataTableService.export(body, res);
     }
 
     @Post('findRowsForAssoc')
@@ -64,6 +83,18 @@ export class XLibController {
     async userAuthentication(@Body() body: XUserAuthenticationRequest, @Headers('Authorization') headerAuth: string): Promise<XUserAuthenticationResponse> {
         this.xLibService.checkAuthenticationPublic(headerAuth);
         return await this.xLibService.userAuthentication(body);
+    }
+
+    @Post('userChangePassword')
+    async userChangePassword(@Body() body: {username: string; passwordNew: string;}, @Headers('Authorization') headerAuth: string) {
+        await this.xLibService.checkAuthentication(headerAuth);
+        await this.xLibService.userChangePassword(body);
+    }
+
+    @Post('userSaveRow')
+    async userSaveRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string) {
+        await this.xLibService.checkAuthentication(headerAuth);
+        await this.xLibService.userSaveRow(body);
     }
 
     @Post('getXEntityMap')

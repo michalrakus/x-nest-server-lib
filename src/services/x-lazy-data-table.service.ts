@@ -1,11 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import {HttpStatus, Injectable} from '@nestjs/common';
 import {FindResult} from "../serverApi/FindResult";
 import {getRepository, OrderByCondition, SelectQueryBuilder} from "typeorm";
-import {Filters, FindParam, SortMeta} from "../serverApi/FindParam";
+import {Filters, FindParam, ResultType, SortMeta} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
+import {Response} from "express";
+import {ReadStream} from "fs";
+import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transformer/RawSqlResultsToEntityTransformer";
+import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
+import {CsvDecimalFormat, CsvParam, ExportParam, ExportType} from "../serverApi/ExportImportParam";
+import {XEntityMetadataService} from "./x-entity-metadata.service";
+import {XField} from "../serverApi/XEntityMetadata";
 
 @Injectable()
 export class XLazyDataTableService {
+
+    constructor(
+        private readonly xEntityMetadataService: XEntityMetadataService
+    ) {}
 
     async findRows(findParam : FindParam): Promise<FindResult> {
         //console.log("LazyDataTableService.findRows findParam = " + JSON.stringify(findParam));
@@ -21,33 +32,48 @@ export class XLazyDataTableService {
 
         const repository = getRepository(findParam.entity);
 
-        let selectQueryBuilder : SelectQueryBuilder<unknown> = repository.createQueryBuilder(rootAlias);
-        selectQueryBuilder.select("COUNT(1)", "count");
-        for (const [field, alias] of assocMap.entries()) {
-            selectQueryBuilder.leftJoin(field, alias);
+        let selectQueryBuilder : SelectQueryBuilder<unknown>;
+
+        let rowCount: number;
+        if (findParam.resultType === ResultType.OnlyRowCount || findParam.resultType === ResultType.RowCountAndPagedRows) {
+            selectQueryBuilder = repository.createQueryBuilder(rootAlias);
+            selectQueryBuilder.select("COUNT(1)", "count");
+            for (const [field, alias] of assocMap.entries()) {
+                selectQueryBuilder.leftJoin(field, alias);
+            }
+            selectQueryBuilder.where(where, params);
+
+            const rowOne = await selectQueryBuilder.getRawOne();
+            rowCount = rowOne.count;
+            //console.log("XLazyDataTableService.readLazyDataTable rowCount = " + rowCount);
         }
-        selectQueryBuilder.where(where, params);
 
-        const { count } = await selectQueryBuilder.getRawOne();
+        let rowList: any[];
+        if (findParam.resultType === ResultType.RowCountAndPagedRows || findParam.resultType === ResultType.AllRows) {
+            const selectItems: string[] = this.createSelectItems(rootAlias, findParam.fields, assocMap);
+            const orderByCondition : OrderByCondition = this.createOrderByCondition(rootAlias, findParam.multiSortMeta, assocMap);
 
-        //console.log("XLazyDataTableService.readLazyDataTable count = " + count);
+            // TODO - selectovat len stlpce ktore treba - nepodarilo sa, viac v TODO.txt
+            selectQueryBuilder = repository.createQueryBuilder(rootAlias);
+            for (const [field, alias] of assocMap.entries()) {
+                selectQueryBuilder.leftJoinAndSelect(field, alias);
+            }
+            selectQueryBuilder.where(where, params);
+            selectQueryBuilder.orderBy(orderByCondition);
 
-        const selectItems: string[] = this.createSelectItems(rootAlias, findParam.fields, assocMap);
-        const orderByCondition : OrderByCondition = this.createOrderByCondition(rootAlias, findParam.multiSortMeta, assocMap);
+            if (findParam.resultType === ResultType.RowCountAndPagedRows) {
+                selectQueryBuilder.skip(findParam.first);
+                selectQueryBuilder.take(findParam.rows);
+            }
 
-        // TODO - selectovat len stlpce ktore treba - nepodarilo sa, viac v TODO.txt
-        selectQueryBuilder = repository.createQueryBuilder(rootAlias);
-        for (const [field, alias] of assocMap.entries()) {
-            selectQueryBuilder.leftJoinAndSelect(field, alias);
+            rowList = await selectQueryBuilder.getMany();
+
+            if (findParam.resultType === ResultType.AllRows) {
+                rowCount = rowList.length;
+            }
         }
-        selectQueryBuilder.where(where, params);
-        selectQueryBuilder.orderBy(orderByCondition);
-        selectQueryBuilder.skip(findParam.first);
-        selectQueryBuilder.take(findParam.rows);
 
-        const rowList: any[] = await selectQueryBuilder.getMany();
-
-        const findResult: FindResult = {rowList: rowList, totalRecords: count};
+        const findResult: FindResult = {rowList: rowList, totalRecords: rowCount};
         return Promise.resolve(findResult);
     }
 
@@ -149,5 +175,183 @@ export class XLazyDataTableService {
             throw "findRowById - expected rows = 1, but found " + rows.length + " rows";
         }
         return rows[0];
+    }
+
+    async export(exportParam: ExportParam, res: Response) {
+        if (exportParam.exportType === ExportType.Csv) {
+            await this.exportCsv(exportParam, res);
+        }
+        else if (exportParam.exportType === ExportType.Json) {
+            await this.exportJson(exportParam, res);
+        }
+    }
+
+    private async exportCsv(exportParam: ExportParam, res: Response) {
+
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createSelectQueryBuilder(exportParam);
+        const readStream: ReadStream = await selectQueryBuilder.stream();
+
+        // potrebujeme zoznam xField-ov, aby sme vedeli urcit typ fieldu
+        const xFieldList: XField[] = [];
+        const xEntity = this.xEntityMetadataService.getXEntity(exportParam.entity);
+        for (const field of exportParam.fields) {
+            xFieldList.push(this.xEntityMetadataService.getXFieldByPath(xEntity, field));
+        }
+
+        res.setHeader('Content-Type', 'text/csv; charset=UTF-8');
+        res.charset = "utf8"; // default encoding
+
+        if (exportParam.csvParam.useHeaderLine) {
+            const csvRow: string = this.createHeaderLine(exportParam.csvParam);
+            res.write(csvRow, "utf8");
+        }
+
+        readStream.on('data', data => {
+            const entityObj = this.transformToEntity(data, selectQueryBuilder);
+            const rowStr: string = this.convertToCsv(entityObj, exportParam.fields, xFieldList, exportParam.csvParam);
+            res.write(rowStr, "utf8");
+        });
+
+        readStream.on('end', () => {
+            res.status(HttpStatus.OK);
+            res.end();
+        });
+    }
+
+    private async exportJson(exportParam: ExportParam, res: Response) {
+
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createSelectQueryBuilder(exportParam);
+        const readStream: ReadStream = await selectQueryBuilder.stream();
+
+        res.setHeader('Content-Type', 'application/json; charset=UTF-8');
+        res.charset = "utf8"; // default encoding
+
+        res.write("[", "utf8");
+
+        let firstRow = true;
+
+        readStream.on('data', data => {
+            const entityObj = this.transformToEntity(data, selectQueryBuilder);
+            let rowStr: string = "";
+            if (firstRow) {
+                firstRow = false;
+            }
+            else {
+                rowStr += ",";
+            }
+            rowStr += XUtilsCommon.newLine;
+            rowStr += XUtilsCommon.objectAsJSON(entityObj);
+            res.write(rowStr, "utf8");
+        });
+
+        readStream.on('end', () => {
+            res.write(XUtilsCommon.newLine + "]", "utf8");
+            res.status(HttpStatus.OK);
+            res.end();
+        });
+    }
+
+    private createSelectQueryBuilder(exportParam: ExportParam): SelectQueryBuilder<unknown> {
+
+        const assocMap: Map<string, string> = new Map<string, string>();
+
+        // TODO - krajsi nazov aliasu?
+        const rootAlias: string = "t0";
+
+        const {where, params} = this.createWhere(rootAlias, exportParam.filters, assocMap);
+
+        const repository = getRepository(exportParam.entity);
+
+        if (exportParam.exportType === ExportType.Csv) {
+            const selectItems: string[] = this.createSelectItems(rootAlias, exportParam.fields, assocMap);
+        }
+        const orderByCondition: OrderByCondition = this.createOrderByCondition(rootAlias, exportParam.multiSortMeta, assocMap);
+
+        // TODO - selectovat len stlpce ktore treba - nepodarilo sa, viac v TODO.txt
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder(rootAlias);
+        for (const [field, alias] of assocMap.entries()) {
+            selectQueryBuilder.leftJoinAndSelect(field, alias);
+        }
+        selectQueryBuilder.where(where, params);
+        selectQueryBuilder.orderBy(orderByCondition);
+
+        return selectQueryBuilder;
+    }
+
+    private transformToEntity(data: any, selectQueryBuilder: SelectQueryBuilder<unknown>): any {
+        // pozor, tato transformacia vracia niektore decimaly (napr. Car.price) ako string, to asi nie je standard
+        const transformer = new RawSqlResultsToEntityTransformer(selectQueryBuilder.expressionMap, selectQueryBuilder.connection.driver, [], [], undefined);
+        const entityList: any[] = transformer.transform([data], selectQueryBuilder.expressionMap.mainAlias!);
+        return entityList[0];
+    }
+
+    private convertToCsv(entityObj: any, fields: string[], xFieldList: XField[], csvParam: CsvParam): string {
+        let csvRow: string = "";
+        for (const [index, field] of fields.entries()) {
+            const xField = xFieldList[index];
+            const value = XUtilsCommon.getValueByPath(entityObj, field);
+            // value should be at least null (no undefined)
+            let valueStr: string;
+            if (value !== null && value !== undefined) {
+                if (value instanceof Date) {
+                    // TODO - ak pre datetime nastavime vsetky zlozky casu na 00:00:00, tak sformatuje hodnotu ako datum a spravi chybu pri zapise do DB - zapise  1:00:00
+                    if (value.getHours() === 0 && value.getMinutes() === 0 && value.getSeconds() === 0) {
+                        valueStr = dateFormat(value, 'yyyy-mm-dd');
+                    }
+                    else {
+                        // jedna sa o datetime
+                        valueStr = dateFormat(value, 'yyyy-mm-dd HH:MM:ss');
+                    }
+                }
+                // niektore decimal hodnoty neprichadzaju ako number (typeof value nie je 'number' ale 'string') preto pouzijeme xField
+                else if (xField.type === "decimal") {
+                    if (csvParam.csvDecimalFormat === CsvDecimalFormat.Comma) {
+                        valueStr = value.toString().replace('.', ','); // 123456,78
+                    }
+                    else {
+                        // csvParam.csvDecimalFormat === CsvDecimalFormat.Dot
+                        valueStr = value.toString(); // 123456.78
+                    }
+                }
+                else {
+                    valueStr = value.toString();
+                }
+            }
+            else if (value === null) {
+                valueStr = "null";
+            }
+            else {
+                valueStr = "";
+            }
+            valueStr = this.processCsvItem(valueStr, csvParam.csvSeparator);
+            if (csvRow.length > 0) {
+                csvRow += csvParam.csvSeparator;
+            }
+            csvRow += valueStr;
+        }
+        csvRow += XUtilsCommon.newLine;
+        return csvRow;
+    }
+
+    private createHeaderLine(csvParam: CsvParam): string {
+        let csvRow: string = "";
+        for (const header of csvParam.headers) {
+            const valueStr = this.processCsvItem(header, csvParam.csvSeparator);
+            if (csvRow.length > 0) {
+                csvRow += csvParam.csvSeparator;
+            }
+            csvRow += valueStr;
+        }
+        csvRow += XUtilsCommon.newLine;
+        return csvRow;
+    }
+
+    private processCsvItem(valueStr: string, csvSeparator: string): string {
+        valueStr = valueStr.replace(/"/g, '""'); // ekvivalent pre regexp /"/g je: new RegExp('"', 'g')
+        // aj tu pouzivam XUtils.csvSeparator
+        if (valueStr.search(new RegExp(`("|${csvSeparator}|\n)`, 'g')) >= 0) {
+            valueStr = '"' + valueStr + '"'
+        }
+        return valueStr;
     }
 }

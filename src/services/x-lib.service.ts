@@ -14,6 +14,7 @@ import {XUtils} from "./XUtils";
 import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
 import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class XLibService {
@@ -118,16 +119,35 @@ export class XLibService {
     async userAuthentication(userAuthenticationRequest: XUserAuthenticationRequest): Promise<XUserAuthenticationResponse> {
         const repository = getRepository(XUser);
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
-        selectQueryBuilder.where("xUser.username = :username AND xUser.password = :password", userAuthenticationRequest);
+        selectQueryBuilder.where("xUser.username = :username", userAuthenticationRequest);
         const xUserList: XUser[] = await selectQueryBuilder.getMany();
         let userAuthenticationResponse: XUserAuthenticationResponse;
-        if (xUserList.length === 1) {
+        if (xUserList.length === 1 && await bcrypt.compare(userAuthenticationRequest.password, xUserList[0].password)) {
             userAuthenticationResponse = {authenticationOk: true, xUser: xUserList[0]};
         }
         else {
             userAuthenticationResponse = {authenticationOk: false};
         }
         return userAuthenticationResponse;
+    }
+
+    async userChangePassword(request: {username: string; passwordNew: string;}) {
+        const repository = getRepository(XUser);
+        const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
+        selectQueryBuilder.where("xUser.username = :username", request);
+        const xUser: XUser = await selectQueryBuilder.getOneOrFail();
+        xUser.password = await this.hashPassword(request.passwordNew);
+        await repository.save(xUser);
+    }
+
+    async userSaveRow(row: SaveRowParam) {
+        const repository = getRepository(row.entity);
+        // ak bolo zmenene heslo, treba ho zahashovat
+        // ak nebolo vyplnene nove heslo, tak v password pride undefined a mapper atribut nebude menit
+        if (row.object.password && row.object.password !== '') {
+            row.object.password = await this.hashPassword(row.object.password);
+        }
+        await repository.save(row.object);
     }
 
     // zatial docasne sem
@@ -149,12 +169,11 @@ export class XLibService {
 
         const repository = getRepository(XUser);
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
-        selectQueryBuilder.select("COUNT(1)", "count");
-        selectQueryBuilder.where("xUser.username = :username AND xUser.password = :password", {username: username, password: password});
+        selectQueryBuilder.select("xUser.password", "passwordDB");
+        selectQueryBuilder.where("xUser.username = :username", {username: username});
 
-        const {count} = await selectQueryBuilder.getRawOne();
-        // pozor, count nie je number ale string!
-        if (parseInt(count) !== 1) {
+        const {passwordDB} = await selectQueryBuilder.getRawOne();
+        if (!await bcrypt.compare(password, passwordDB)) {
             throw "Authentication failed.";
         }
         //console.log(`Autentifikacia zbehla ok pre ${username}/${password}`);
@@ -166,5 +185,11 @@ export class XLibService {
             throw "Authentication failed.";
         }
         //console.log(`Public autentifikacia zbehla ok`);
+    }
+
+    private hashPassword(password: string): Promise<string> {
+        // standardne by mal byt saltOrRounds = 10, potom trva jeden vypocet asi 100 ms, co sa povazuje za dostatocne bezpecne proti utoku hrubou vypoctovou silou
+        // kedze my testujeme heslo pri kazdom requeste, tak som znizil saltOrRounds na 1, potom trva jeden vypocet (v bcrypt.compare) asi 10 ms, cena je trochu nizsia bezpecnost
+        return bcrypt.hash(password, 1);
     }
 }

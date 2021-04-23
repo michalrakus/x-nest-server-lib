@@ -1,12 +1,12 @@
 CREATE TABLE x_user (
 	id_x_user int NOT NULL auto_increment,
 	username varchar(64) NOT NULL,
-	password varchar(64) NOT NULL,
+	password CHAR(60) NOT NULL,
     name varchar(128) NOT NULL, -- meno a priezvisko
 	PRIMARY KEY (id_x_user)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
 
-CREATE INDEX x_user_username_idx ON x_user (username);
+ALTER TABLE x_user ADD CONSTRAINT uq_x_user_username UNIQUE KEY(username);
 
 CREATE TABLE x_browse_meta (
 	id_x_browse_meta int NOT NULL auto_increment,

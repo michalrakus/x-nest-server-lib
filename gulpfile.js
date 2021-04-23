@@ -20,7 +20,8 @@ function generateApi(cb) {
         //"./lib/services/x-lazy-data-table.service",
         //"./lib/services/x-lib.service",
         //"./lib/services/x-lib.controller",
-        "./lib/services/x-lib.module"
+        "./lib/services/x-lib.module",
+        "./lib/serverApi/ExportImportParam"
     ];
 
     for (const apiFile of apiFileList) {

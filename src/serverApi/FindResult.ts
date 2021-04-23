@@ -1,4 +1,4 @@
 export interface FindResult {
-    rowList : any[];
-    totalRecords : number;
+    rowList?: any[];
+    totalRecords?: number;
 }

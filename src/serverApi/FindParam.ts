@@ -12,11 +12,18 @@ export interface SortMeta {
     order : 1 | -1; // hodnoty 1 alebo -1
 }
 
+export enum ResultType {
+    OnlyRowCount,
+    RowCountAndPagedRows,
+    AllRows
+}
+
 export interface FindParam {
-    first : number;
-    rows : number; // page size
-    filters : Filters;
-    multiSortMeta : SortMeta[]; // typ []
+    resultType: ResultType;
+    first?: number;
+    rows?: number; // page size
+    filters: Filters;
+    multiSortMeta?: SortMeta[]; // typ []
     entity: string;
     fields: string[];
 }
