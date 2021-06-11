@@ -38,6 +38,10 @@ export class XUtilsCommon {
         }
     }
 
+    static isSingleField(path: string): boolean {
+        return path.indexOf(".") === -1;
+    }
+
     static objectAsJSON(value: any): string {
 
         // sem treba dat nejaku pre nas vhodnu serializaciu
@@ -64,6 +68,11 @@ export class XUtilsCommon {
         Date.prototype.toJSON = dateToJSONOriginal;
 
         return json;
+    }
+
+    static getDayName(date: Date): string | undefined {
+        const days = ['nedeľa', 'pondelok', 'utorok', 'streda', 'štvrtok', 'piatok', 'sobota'];
+        return date ? days[date.getDay()] : undefined;
     }
 }
 

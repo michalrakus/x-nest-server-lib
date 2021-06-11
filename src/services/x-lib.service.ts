@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
     EntityMetadata,
     getManager,
-    getRepository,
+    getRepository, OrderByCondition,
     SelectQueryBuilder
 } from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
@@ -15,6 +15,7 @@ import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
 import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
 import * as bcrypt from 'bcrypt';
+import {FindParamRows} from "./FindParamRows";
 
 @Injectable()
 export class XLibService {
@@ -23,6 +24,7 @@ export class XLibService {
         private readonly xEntityMetadataService: XEntityMetadataService
     ) {}
 
+    // deprecated - mal by sa pouzivat findRows
     async findRowsForAssoc(findParamRows : FindParamRowsForAssoc): Promise<any[]> {
         const repository = getRepository(findParamRows.entity);
         const entityMetadata: EntityMetadata = repository.metadata
@@ -40,12 +42,37 @@ export class XLibService {
         return rows;
     }
 
-    async saveRow(row: SaveRowParam) {
+    // toto je specialny pripad vseobecnejsieho servisu XLazyDataTableService.findRows, ak resultType === ResultType.AllRows
+    // (nedava napr. moznost dotahovat aj asociovane objekty, sortovat podla viacerych stlpcov a pod. - je to take zjednodusene)
+    async findRows(findParamRows: FindParamRows): Promise<any[]> {
+        const repository = getRepository(findParamRows.entity);
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
+        // filter cez displayField pouziva napr. SearchButton, ak user v inpute vyplni len cast hodnoty a odide,
+        // tak cez tento filter hladame ci hodnote zodpoveda prave 1 zaznam
+        if (findParamRows.displayField && findParamRows.filter) {
+            selectQueryBuilder.where("t0." + findParamRows.displayField + " LIKE :filter", {filter: findParamRows.filter + "%"});
+        }
+        if (findParamRows.sortMeta) {
+            let orderByItems: OrderByCondition = {};
+            orderByItems["t0." + findParamRows.sortMeta.field] = (findParamRows.sortMeta.order === 1 ? "ASC" : "DESC");
+            selectQueryBuilder.orderBy(orderByItems);
+        }
+        return await selectQueryBuilder.getMany();
+    }
+
+    async saveRow(row: SaveRowParam): Promise<any> {
 
         // saveRow sluzi aj pre insert (id-cko je undefined, TypeORM robi rovno insert)
         // aj pre update (id-cko je cislo, TypeORM najprv cez select zistuje ci dany zaznam existuje)
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
+
+        // ak mame vygenerovane id-cko, zmenime ho na undefined (aby sme mali priamy insert a korektne id-cko)
+        if (row.object.__x_generatedRowId) {
+            row.object[xEntity.idField] = undefined;
+            delete row.object.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
+        }
+
         const assocMap: XAssocMap = xEntity.assocToManyMap;
         for (const [assocName, assoc] of Object.entries(assocMap)) {
             const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
@@ -60,9 +87,12 @@ export class XLibService {
                     // (netestuje sa ci zaznam uz existuje v DB (ako je tomu pri null alebo inej ciselnej hodnote))
                     // kaskadny insert/update potom pekne zafunguje
                     childRow[xChildEntity.idField] = undefined;
+                    delete childRow.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
                 }
             }
         }
+
+        let objectReloaded: any = undefined;
 
         // vsetky db operacie dame do jednej transakcie
         await getManager().transaction(async manager => {
@@ -87,15 +117,20 @@ export class XLibService {
                     }
                     const repository = manager.getRepository(xChildEntity.name);
                     const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
-                    selectQueryBuilder.innerJoin(`t0.${assoc.inverseAssocName}`, "t1");
-                    selectQueryBuilder.where(`t1.${xEntity.idField} = :rowId`, {rowId: rowId});
+                    // poznamka: "t0.${assoc.inverseAssocName}.${xEntity.idField}" sa transformuje na "t0.<idField>" v sql, ne-joinuje sa tabulka pre xEntity
+                    selectQueryBuilder.where(`t0.${assoc.inverseAssocName}.${xEntity.idField} = :rowId`, {rowId: rowId});
                     if (idList.length > 0) {
                         selectQueryBuilder.andWhere(`t0.${xChildEntity.idField} NOT IN (:...idList)`, {idList: idList});
                     }
                     const rowList: any[] = await selectQueryBuilder.getMany();
                     //console.log("Nasli sme na zrusenie:" + rowList.length);
                     //console.log(rowList);
-                    await repository.remove(rowList);
+                    if (rowList.length > 0) {
+                        //await repository.remove(rowList);
+                        // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
+                        const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
+                        await repository.delete(rowIdList);
+                    }
                 }
             }
 
@@ -104,16 +139,64 @@ export class XLibService {
             //console.log(row.object);
             //const date = row.object.carDate;
             //console.log(typeof date);
-            await repository.save(row.object);
+            objectReloaded = await repository.save(row.object);
         });
+
+        return row.reload ? objectReloaded : {};
     }
 
     async removeRow(row: RemoveRowParam) {
-        //console.log('sme v Pokus1Service.removeRow');
 
-        // TODO - ak TypeORM/DB neposkytuje kaskadny delete, dorobit aj ten (asi len pre prvu uroven)
-        const repository = getRepository(row.entity);
-        await repository.delete(row.id);
+        // TypeORM neposkytuje kaskadny delete, preto je tu kaskadny delete dorobeny
+
+        const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
+
+        // vsetky db operacie dame do jednej transakcie
+        await getManager().transaction(async manager => {
+            // prejdeme vsetky *ToMany asociacie a zmazeme ich child zaznamy
+            const assocMap: XAssocMap = xEntity.assocToManyMap;
+            for (const [assocName, assoc] of Object.entries(assocMap)) {
+                const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
+                if (assoc.inverseAssocName === undefined) {
+                    throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
+                }
+                const childRepository = manager.getRepository(xChildEntity.name);
+                const selectQueryBuilder: SelectQueryBuilder<unknown> = childRepository.createQueryBuilder("t0");
+                // poznamka: "t0.${assoc.inverseAssocName}.${xEntity.idField}" sa transformuje na "t0.<idField>" v sql, ne-joinuje sa tabulka pre xEntity
+                selectQueryBuilder.where(`t0.${assoc.inverseAssocName}.${xEntity.idField} = :rowId`, {rowId: row.id});
+                const rowList: any[] = await selectQueryBuilder.getMany();
+                if (rowList.length > 0) {
+                    // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
+                    const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
+                    await childRepository.delete(rowIdList);
+                }
+            }
+
+            // samotny delete entity
+            const repository = manager.getRepository(row.entity);
+            await repository.delete(row.id);
+        });
+
+        /*
+            POZNAMKA: efektivnejsie by bolo pouzivat DeleteQueryBuilder (priamy DELETE FROM ... WHERE <fk-stlpec> = <id>),
+            ten ma vsak bugy - tu je priklad kodu ktory som skusal (predpoklada ze popri ManyToOne asociacii mame aj atribut pre FK stlpec)
+
+            const repository = getRepository(VydajDobrovolnik);
+
+            // DeleteQueryBuilder nefunguje ak chceme pouzivat aliasy tabuliek a mapovat nazvy atributov do nazvov stlpcov
+            // je to bug - https://github.com/typeorm/typeorm/issues/5931
+            const selectQueryBuilder: SelectQueryBuilder<VydajDobrovolnik> = repository.createQueryBuilder();
+            //selectQueryBuilder.where("vydajD.idVydaj = :idVydaj", {idVydaj: row.id});
+            await selectQueryBuilder.delete().from(VydajDobrovolnik, "vydajDobr").where("vydajDobr.idVydaj = :idVydaj", {idVydaj: row.id}).execute();
+            // vrati:
+            //query failed: DELETE FROM `vydaj_dobrovolnik` WHERE vydajDobr.idVydaj = ? -- PARAMETERS: [22]
+            //error: Error: ER_BAD_FIELD_ERROR: Unknown column 'vydajDobr.idVydaj' in 'where clause'
+
+            // nezafunguje ani toto:
+            const selectQueryBuilder: SelectQueryBuilder<VydajDobrovolnik> = repository.createQueryBuilder("vydajD");
+            selectQueryBuilder.where("vydajD.idVydaj = :idVydaj", {idVydaj: row.id});
+            await selectQueryBuilder.delete().execute();
+        */
     }
 
     async userAuthentication(userAuthenticationRequest: XUserAuthenticationRequest): Promise<XUserAuthenticationResponse> {

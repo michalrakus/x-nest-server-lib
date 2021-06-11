@@ -10,10 +10,10 @@ export class XBrowseMeta {
     @Column({length: 64, nullable: false})
     entity: string;
 
-    @Column({name: 'browse_id', length: 64})
+    @Column({name: 'browse_id', length: 64, nullable: true})
     browseId: string;
 
-    @Column({width: 6})
+    @Column({width: 6, nullable: true})
     rows: number;
 
     @OneToMany(type => XColumnMeta, columnMeta => columnMeta.browseMeta, {cascade: ["insert", "update", "remove"]})

@@ -10,23 +10,23 @@ export class XColumnMeta {
     @Column({length: 64, nullable: false})
     field: string;
 
-    @Column({length: 64})
+    @Column({length: 64, nullable: true})
     header: string;
 
-    // enum 'left','center','right' (default 'left')
-    @Column({length: 6, nullable: false})
+    // enum 'left','center','right' (default null - means depends on type)
+    @Column({length: 6, nullable: true})
     align: string;
 
     @Column({name: 'dropdown_in_filter', nullable: false})
     dropdownInFilter: boolean;
 
-    @Column({length: 16})
+    @Column({length: 16, nullable: true})
     width: string;
 
-    @Column({name: 'column_order', width: 3})
+    @Column({name: 'column_order', width: 3, nullable: false})
     columnOrder: number;
 
-    @ManyToOne(type => XBrowseMeta, browseMeta => browseMeta.columnMetaList)
+    @ManyToOne(type => XBrowseMeta, browseMeta => browseMeta.columnMetaList, {nullable: false})
     @JoinColumn({name: "id_x_browse_meta"})
     browseMeta: XBrowseMeta;
 }

@@ -44,6 +44,10 @@ export class XEntityMetadataService {
         // POZOR! aj asociacie (napr. ManyToOne) sem pridava!
         for (const columnMetadata of columnMetadataList) {
             const fieldName = columnMetadata.propertyName;
+            // if (entityMetadata.name === 'XBrowseMeta' || entityMetadata.name === 'XColumnMeta') {
+            //     console.log("******** metadata for ************ " + entityMetadata.name + "." + fieldName);
+            //     console.log(columnMetadata);
+            // }
             let type = "unknown"; // default
             if (typeof columnMetadata.type === "string") {
                 type = columnMetadata.type;
@@ -70,6 +74,7 @@ export class XEntityMetadataService {
             if (type === "number" && width === undefined) {
                 width = 11; // tychto 11 je default pre int stlpce v MySql, pre ine databazy to nemusi platit
             }
+            // poznamka: columnMetadata.isNullable - default je false, co nie je moc prijemne, vecsina stlpcov je nullable
             fieldMap[fieldName] = {name: fieldName, type: type, isNullable: columnMetadata.isNullable,
                                     length: length, precision: columnMetadata.precision, scale: columnMetadata.scale, width: width};
         }
@@ -90,8 +95,9 @@ export class XEntityMetadataService {
         const assocMap: XAssocMap = {};
         for (const relationMetadata of relationMetadataList) {
             const assocName = relationMetadata.propertyName;
-            const inverseAssoc = relationMetadata.inverseRelation !== undefined ? relationMetadata.inverseRelation.propertyName : undefined;
-            assocMap[assocName] = ({name: assocName, entityName: relationMetadata.inverseEntityMetadata.name, inverseAssocName: inverseAssoc});
+            const inverseAssoc = relationMetadata.inverseRelation?.propertyName;
+            // poznamka: relationMetadata.isNullable - default je true (na rozdiel od columnMetadata!), ale mozno to v buducnosti zjednotia so stlpcami, takze je lepsie to vzdy explicitne uviest
+            assocMap[assocName] = ({name: assocName, entityName: relationMetadata.inverseEntityMetadata.name, inverseAssocName: inverseAssoc, isNullable: relationMetadata.isNullable});
         }
         return assocMap;
     }

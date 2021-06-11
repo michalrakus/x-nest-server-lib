@@ -1,3 +1,4 @@
+// deprecated - mal by sa pouzivat findParamRows
 export interface FindParamRowsForAssoc {
     entity: string;
     assocField: string;

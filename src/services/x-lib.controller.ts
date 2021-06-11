@@ -1,4 +1,4 @@
-import {Body, Headers, Controller, Post, Res, HttpStatus} from '@nestjs/common';
+import {Body, Headers, Controller, Post, Res, HttpStatus, UseFilters, HttpException} from '@nestjs/common';
 import {XLibService} from "./x-lib.service";
 import {FindResult} from "../serverApi/FindResult";
 import {XLazyDataTableService} from "./x-lazy-data-table.service";
@@ -14,8 +14,11 @@ import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 import {Response} from 'express';
 import {ExportParam} from "../serverApi/ExportImportParam";
+import {XExceptionFilter} from "./x-exception.filter";
+import {FindParamRows} from "./FindParamRows";
 
 @Controller()
+@UseFilters(XExceptionFilter)
 export class XLibController {
     constructor(
         private readonly xLibService: XLibService,
@@ -49,6 +52,7 @@ export class XLibController {
         await this.xLazyDataTableService.export(body, res);
     }
 
+    // deprecated - lepsie je pouzit findRows
     @Post('findRowsForAssoc')
     async findRowsForAssoc(@Body() body: FindParamRowsForAssoc, @Headers('Authorization') headerAuth: string): Promise<any[]> {
         await this.xLibService.checkAuthentication(headerAuth);
@@ -56,10 +60,11 @@ export class XLibController {
         return rows;
     }
 
-    // @Post('getAssocName')
-    // getAssocName(@Body() body: GetAssocNameParam): Promise<any> {
-    //     return this.xLibService.getAssocName(body);
-    // }
+    @Post('findRows')
+    async findRows(@Body() body: FindParamRows, @Headers('Authorization') headerAuth: string): Promise<any[]> {
+        await this.xLibService.checkAuthentication(headerAuth);
+        return await this.xLibService.findRows(body);
+    }
 
     @Post('findRowById')
     async findRowById(@Body() body: FindRowByIdParam, @Headers('Authorization') headerAuth: string): Promise<any> {
@@ -68,15 +73,28 @@ export class XLibController {
     }
 
     @Post('saveRow')
-    async saveRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string) {
+    async saveRow(@Body() body: SaveRowParam, @Headers('Authorization') headerAuth: string): Promise<any> {
         await this.xLibService.checkAuthentication(headerAuth);
-        await this.xLibService.saveRow(body);
+        return await this.xLibService.saveRow(body);
     }
 
     @Post('removeRow')
     async removeRow(@Body() body: RemoveRowParam, @Headers('Authorization') headerAuth: string) {
-        await this.xLibService.checkAuthentication(headerAuth);
-        await this.xLibService.removeRow(body);
+//        try {
+            await this.xLibService.checkAuthentication(headerAuth);
+            await this.xLibService.removeRow(body);
+        // }
+        // catch(error) {
+        //     console.log("mame chybu *************");
+        //     console.log(error);
+        //     console.log(JSON.stringify(error));
+        //     console.log(error.toString());
+        //     console.log("*************");
+        //     console.log(error.sqlMessage);
+        //     console.log(error.sql);
+        //     //throw new HttpException('*** Forbidden ***', HttpStatus.FORBIDDEN);
+        //     throw error;
+        // }
     }
 
     @Post('userAuthentication')

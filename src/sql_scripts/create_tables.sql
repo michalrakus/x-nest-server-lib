@@ -23,7 +23,7 @@ CREATE TABLE x_column_meta (
     align enum('left','center','right'),
     dropdown_in_filter tinyint(1) NOT NULL default 0,
     width varchar(16),
-    column_order int(3),
+    column_order int(3) NOT NULL,
 	id_x_browse_meta int NOT NULL,
 	PRIMARY KEY (id_x_column_meta)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
