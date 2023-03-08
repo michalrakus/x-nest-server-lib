@@ -13,10 +13,15 @@ function generateApi(cb) {
     const fs = require('fs');
 
     const apiFileList = [
+        "./lib/auth/auth.module",
+        "./lib/auth/jwt-auth.guard",
+        "./lib/auth/public",
         "./lib/administration/xuser.entity",
         "./lib/administration/x-browse-meta.entity",
         "./lib/administration/x-column-meta.entity",
+        //"./lib/auth/jwt-auth.guard.ts",
         //"./lib/services/x-entity-metadata.service",
+        "./lib/services/x-exception.filter",
         //"./lib/services/x-lazy-data-table.service",
         //"./lib/services/x-lib.service",
         //"./lib/services/x-lib.controller",

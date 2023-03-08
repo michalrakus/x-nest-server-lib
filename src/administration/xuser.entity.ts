@@ -9,9 +9,12 @@ export class XUser {
     @Column({length: 64, nullable: false})
     username: string;
 
-    @Column({length: 64, nullable: false})
+    @Column({length: 64, nullable: true})
     password: string;
 
     @Column({length: 128, nullable: false})
     name: string;
+
+    @Column({nullable: false})
+    enabled: boolean;
 }

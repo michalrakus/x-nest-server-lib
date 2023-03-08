@@ -1,14 +1,18 @@
 import {Injectable} from "@nestjs/common";
-import {getRepository, SelectQueryBuilder} from "typeorm";
+import {DataSource, SelectQueryBuilder} from "typeorm";
 import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
 import {XBrowseMeta} from "../administration/x-browse-meta.entity";
 
 @Injectable()
 export class XBrowseFormMetadataService {
 
+    constructor(
+        private readonly dataSource: DataSource
+    ) {}
+
     async getXBrowseMetaMap(): Promise<XBrowseMetaMap> {
 
-        const repository = getRepository(XBrowseMeta);
+        const repository = this.dataSource.getRepository(XBrowseMeta);
         const selectQueryBuilder: SelectQueryBuilder<XBrowseMeta> = repository.createQueryBuilder("xBrowseMeta");
         selectQueryBuilder.leftJoinAndSelect("xBrowseMeta.columnMetaList", "xColumnMeta");
         selectQueryBuilder.orderBy({"xBrowseMeta.idXBrowseMeta": "ASC", "xColumnMeta.columnOrder": "ASC"});

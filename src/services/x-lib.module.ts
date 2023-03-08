@@ -3,22 +3,21 @@ import {XLibController} from './x-lib.controller';
 import {XLibService} from './x-lib.service';
 import {XLazyDataTableService} from './x-lazy-data-table.service';
 import {XEntityMetadataService} from "./x-entity-metadata.service";
-import {TypeOrmModule, TypeOrmModuleOptions} from "@nestjs/typeorm";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 
-// ak sa sem do @Module zapise TypeOrmModule.forFeature([XUser, Car, Brand, Drive, Country]), resp. ak sa ako parameter forRoot posle uz vytvoreny typeOrmModule,
-// aplikacia vrati chybu: Connection "default" was not found
 @Module({})
 export class XLibModule {
-  static forRoot(typeOrmModuleOptions: TypeOrmModuleOptions): DynamicModule {
+
+    // pouzivame metodku forRoot() + DynamicModule aby sme mohli v pripade potreby odovzdat parametre z AppModule
+  static forRoot(): DynamicModule {
 
     return {
-      imports: [TypeOrmModule.forRoot(typeOrmModuleOptions)],
+      imports: [],
       controllers: [XLibController],
       providers: [
           XLibService,
           XLazyDataTableService,
-          {provide: XEntityMetadataService, useValue: new XEntityMetadataService(typeOrmModuleOptions.entities)},
+          XEntityMetadataService,
           XBrowseFormMetadataService
       ],
         // servisy ktore su dostupne v inych moduloch

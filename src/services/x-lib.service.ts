@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
+    DataSource,
     EntityMetadata,
-    getManager,
-    getRepository, OrderByCondition,
+    OrderByCondition,
     SelectQueryBuilder
 } from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
@@ -16,23 +16,28 @@ import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
 import * as bcrypt from 'bcrypt';
 import {FindParamRows} from "./FindParamRows";
+import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
+import {XEnvVar} from "./XEnvVars";
 
 @Injectable()
 export class XLibService {
 
     constructor(
+        private readonly dataSource: DataSource,
         private readonly xEntityMetadataService: XEntityMetadataService
     ) {}
 
-    // deprecated - mal by sa pouzivat findRows
+    /**
+     * @deprecated - mal by sa pouzivat findRows
+     */
     async findRowsForAssoc(findParamRows : FindParamRowsForAssoc): Promise<any[]> {
-        const repository = getRepository(findParamRows.entity);
+        const repository = this.dataSource.getRepository(findParamRows.entity);
         const entityMetadata: EntityMetadata = repository.metadata
         const relationMetadata: RelationMetadata = entityMetadata.findRelationWithPropertyPath(findParamRows.assocField);
         if (relationMetadata === undefined) {
             throw "Unexpected error - RelationMetadata for property " + findParamRows.assocField + " not found for entity " + findParamRows.entity;
         }
-        const repositoryForAssoc = getRepository(relationMetadata.type);
+        const repositoryForAssoc = this.dataSource.getRepository(relationMetadata.type);
         const selectQueryBuilder : SelectQueryBuilder<unknown> = repositoryForAssoc.createQueryBuilder("t0");
         if (findParamRows.displayField !== undefined && findParamRows.displayField !== null && findParamRows.filter !== undefined && findParamRows.filter !== null) {
             selectQueryBuilder.where("t0." + findParamRows.displayField + " LIKE :filter", {filter: findParamRows.filter + "%"});
@@ -45,7 +50,7 @@ export class XLibService {
     // toto je specialny pripad vseobecnejsieho servisu XLazyDataTableService.findRows, ak resultType === ResultType.AllRows
     // (nedava napr. moznost dotahovat aj asociovane objekty, sortovat podla viacerych stlpcov a pod. - je to take zjednodusene)
     async findRows(findParamRows: FindParamRows): Promise<any[]> {
-        const repository = getRepository(findParamRows.entity);
+        const repository = this.dataSource.getRepository(findParamRows.entity);
         const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
         // filter cez displayField pouziva napr. SearchButton, ak user v inpute vyplni len cast hodnoty a odide,
         // tak cez tento filter hladame ci hodnote zodpoveda prave 1 zaznam
@@ -95,7 +100,7 @@ export class XLibService {
         let objectReloaded: any = undefined;
 
         // vsetky db operacie dame do jednej transakcie
-        await getManager().transaction(async manager => {
+        await this.dataSource.manager.transaction(async manager => {
             const rowId = row.object[xEntity.idField];
             if (rowId !== undefined) {
                 // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
@@ -152,7 +157,7 @@ export class XLibService {
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
 
         // vsetky db operacie dame do jednej transakcie
-        await getManager().transaction(async manager => {
+        await this.dataSource.manager.transaction(async manager => {
             // prejdeme vsetky *ToMany asociacie a zmazeme ich child zaznamy
             const assocMap: XAssocMap = xEntity.assocToManyMap;
             for (const [assocName, assoc] of Object.entries(assocMap)) {
@@ -181,7 +186,7 @@ export class XLibService {
             POZNAMKA: efektivnejsie by bolo pouzivat DeleteQueryBuilder (priamy DELETE FROM ... WHERE <fk-stlpec> = <id>),
             ten ma vsak bugy - tu je priklad kodu ktory som skusal (predpoklada ze popri ManyToOne asociacii mame aj atribut pre FK stlpec)
 
-            const repository = getRepository(VydajDobrovolnik);
+            const repository = this.dataSource.getRepository(VydajDobrovolnik);
 
             // DeleteQueryBuilder nefunguje ak chceme pouzivat aliasy tabuliek a mapovat nazvy atributov do nazvov stlpcov
             // je to bug - https://github.com/typeorm/typeorm/issues/5931
@@ -199,8 +204,9 @@ export class XLibService {
         */
     }
 
+    /* old authetication
     async userAuthentication(userAuthenticationRequest: XUserAuthenticationRequest): Promise<XUserAuthenticationResponse> {
-        const repository = getRepository(XUser);
+        const repository = this.dataSource.getRepository(XUser);
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
         selectQueryBuilder.where("xUser.username = :username", userAuthenticationRequest);
         const xUserList: XUser[] = await selectQueryBuilder.getMany();
@@ -213,26 +219,31 @@ export class XLibService {
         }
         return userAuthenticationResponse;
     }
+    */
 
+    /* old authetication - change password
     async userChangePassword(request: {username: string; passwordNew: string;}) {
-        const repository = getRepository(XUser);
+        const repository = this.dataSource.getRepository(XUser);
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
         selectQueryBuilder.where("xUser.username = :username", request);
         const xUser: XUser = await selectQueryBuilder.getOneOrFail();
         xUser.password = await this.hashPassword(request.passwordNew);
         await repository.save(xUser);
     }
+    */
 
     async userSaveRow(row: SaveRowParam) {
-        const repository = getRepository(row.entity);
+        const repository = this.dataSource.getRepository(row.entity);
         // ak bolo zmenene heslo, treba ho zahashovat
         // ak nebolo vyplnene nove heslo, tak v password pride undefined a mapper atribut nebude menit
-        if (row.object.password && row.object.password !== '') {
-            row.object.password = await this.hashPassword(row.object.password);
-        }
+        // -> password sa zatial nepouziva
+        // if (row.object.password && row.object.password !== '') {
+        //     row.object.password = await this.hashPassword(row.object.password);
+        // }
         await repository.save(row.object);
     }
 
+    /* old authentication
     // zatial docasne sem
     async checkAuthentication(headerAuth: string) {
         // zatial pre jednoduchost skontrolujeme vzdy v DB (lepsie by bolo cachovat)
@@ -250,7 +261,7 @@ export class XLibService {
         const username: string = headerAuthDecoded.substring(0, posColon);
         const password: string = headerAuthDecoded.substring(posColon + 1);
 
-        const repository = getRepository(XUser);
+        const repository = this.dataSource.getRepository(XUser);
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
         selectQueryBuilder.select("xUser.password", "passwordDB");
         selectQueryBuilder.where("xUser.username = :username", {username: username});
@@ -261,7 +272,9 @@ export class XLibService {
         }
         //console.log(`Autentifikacia zbehla ok pre ${username}/${password}`);
     }
+    */
 
+    /* old authentication
     checkAuthenticationPublic(headerAuth: string) {
         const xTokenPublic = XUtils.xTokenPublic;
         if (headerAuth === undefined || headerAuth !== `Basic ${Buffer.from(xTokenPublic.username + ':' + xTokenPublic.password).toString('base64')}`) {
@@ -269,10 +282,35 @@ export class XLibService {
         }
         //console.log(`Public autentifikacia zbehla ok`);
     }
+    */
 
+    /* old authentication
     private hashPassword(password: string): Promise<string> {
         // standardne by mal byt saltOrRounds = 10, potom trva jeden vypocet asi 100 ms, co sa povazuje za dostatocne bezpecne proti utoku hrubou vypoctovou silou
         // kedze my testujeme heslo pri kazdom requeste, tak som znizil saltOrRounds na 1, potom trva jeden vypocet (v bcrypt.compare) asi 10 ms, cena je trochu nizsia bezpecnost
         return bcrypt.hash(password, 1);
+    }
+    */
+
+    async postLogin(reqUser: any, xPostLoginRequest: XPostLoginRequest): Promise<XPostLoginResponse> {
+        // audience "https://x-demo-server.herokuapp.com/"
+        const emailKey = XUtils.getEnvVarValue(XEnvVar.X_AUTH0_AUDIENCE) + 'email';
+        const userEmail: string = reqUser[emailKey];
+        if (userEmail === undefined) {
+            throw `Email of the current user was not found in access token. Email-key = ${emailKey}`;
+        }
+
+        const repository = this.dataSource.getRepository(XUser);
+        const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
+        selectQueryBuilder.where("xUser.username = :username", {username: userEmail});
+        const xUser: XUser | null = await selectQueryBuilder.getOne();
+        if (xUser !== null) {
+            // synchronizacia udajov
+            if (xPostLoginRequest.username !== undefined) {
+                xUser.name = xPostLoginRequest.username;
+                await repository.save(xUser);
+            }
+        }
+        return {xUser: xUser !== null ? xUser : undefined};
     }
 }

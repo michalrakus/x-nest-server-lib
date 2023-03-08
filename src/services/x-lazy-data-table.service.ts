@@ -1,6 +1,6 @@
 import {HttpStatus, Injectable} from '@nestjs/common';
 import {FindResult} from "../serverApi/FindResult";
-import {getRepository, OrderByCondition, SelectQueryBuilder} from "typeorm";
+import {DataSource, OrderByCondition, SelectQueryBuilder} from "typeorm";
 import {Filters, FindParam, ResultType, SortMeta} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
@@ -15,6 +15,7 @@ import {XField} from "../serverApi/XEntityMetadata";
 export class XLazyDataTableService {
 
     constructor(
+        private readonly dataSource: DataSource,
         private readonly xEntityMetadataService: XEntityMetadataService
     ) {}
 
@@ -30,7 +31,7 @@ export class XLazyDataTableService {
 
         const {where, params} = this.createWhere(rootAlias, findParam.filters, assocMap);
 
-        const repository = getRepository(findParam.entity);
+        const repository = this.dataSource.getRepository(findParam.entity);
 
         let selectQueryBuilder : SelectQueryBuilder<unknown>;
 
@@ -159,7 +160,7 @@ export class XLazyDataTableService {
         // TODO - krajsi nazov aliasu?
         const rootAlias: string = "t0";
 
-        const repository = getRepository(findParam.entity);
+        const repository = this.dataSource.getRepository(findParam.entity);
 
         const selectItems: string[] = this.createSelectItems(rootAlias, findParam.fields, assocMap);
 
@@ -260,7 +261,7 @@ export class XLazyDataTableService {
 
         const {where, params} = this.createWhere(rootAlias, exportParam.filters, assocMap);
 
-        const repository = getRepository(exportParam.entity);
+        const repository = this.dataSource.getRepository(exportParam.entity);
 
         if (exportParam.exportType === ExportType.Csv) {
             const selectItems: string[] = this.createSelectItems(rootAlias, exportParam.fields, assocMap);

@@ -1,43 +1,36 @@
 import { Injectable } from '@nestjs/common';
 import {XAssoc, XAssocMap, XEntity, XEntityMap, XField, XFieldMap} from "../serverApi/XEntityMetadata";
-import {EntityMetadata, EntitySchema, getRepository, Repository} from "typeorm";
+import {DataSource, EntityMetadata, EntitySchema} from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
 import {ColumnMetadata} from "typeorm/metadata/ColumnMetadata";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
+import {MixedList} from "typeorm/common/MixedList";
 
 @Injectable()
 export class XEntityMetadataService {
 
-    private entityList: (string | Function | EntitySchema<any>)[];
+    private entityList: MixedList<Function | string | EntitySchema>;
 
     // nacachovane metadata
     private xEntityMap: XEntityMap;
 
-    constructor(entityList: (string | Function | EntitySchema<any>)[]) {
-        this.entityList = entityList;
-    }
+    constructor(
+        private readonly dataSource: DataSource
+    ) {}
 
     getXEntityMap(): XEntityMap {
         if (this.xEntityMap === undefined) {
             this.xEntityMap = {};
-            for (const entity of this.entityList) {
-                const repository = getRepository(entity);
-                const xEntity: XEntity = this.getXEntityForRepository(repository);
+            const entityMetadataList = this.dataSource.entityMetadatas;
+            for (const entityMetadata of entityMetadataList) {
+                const xEntity: XEntity = this.getXEntityForEntityMetadata(entityMetadata);
                 this.xEntityMap[xEntity.name] = xEntity;
             }
         }
         return this.xEntityMap;
     }
 
-    // @Deprecated - treba pouzivat getXEntity a neskor zrusit
-    getXEntityOld(entity: string): XEntity {
-        const repository = getRepository(entity);
-        return this.getXEntityForRepository(repository);
-    }
-
-    private getXEntityForRepository(repository: Repository<any>): XEntity {
-
-        const entityMetadata: EntityMetadata = repository.metadata;
+    private getXEntityForEntityMetadata(entityMetadata: EntityMetadata): XEntity {
 
         const fieldMap: XFieldMap = {};
         let columnMetadataList: ColumnMetadata[] = entityMetadata.columns;

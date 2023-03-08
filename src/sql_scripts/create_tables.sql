@@ -1,8 +1,9 @@
 CREATE TABLE x_user (
 	id_x_user int NOT NULL auto_increment,
 	username varchar(64) NOT NULL,
-	password CHAR(60) NOT NULL,
-    name varchar(128) NOT NULL, -- meno a priezvisko
+	password CHAR(60), -- not used if auth2 used
+    name varchar(128) NOT NULL, -- family name + surname
+    disabled tinyint(1) NOT NULL default 0,
 	PRIMARY KEY (id_x_user)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
 

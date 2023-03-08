@@ -3,4 +3,5 @@ export interface XUser {
     username: string;
     password: string;
     name: string;
+    enabled: boolean;
 }
