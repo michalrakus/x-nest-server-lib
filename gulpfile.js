@@ -16,6 +16,7 @@ function generateApi(cb) {
         "./lib/auth/auth.module",
         "./lib/auth/jwt-auth.guard",
         "./lib/auth/public",
+        "./lib/serverApi/ExportImportParam",
         "./lib/administration/xuser.entity",
         "./lib/administration/x-browse-meta.entity",
         "./lib/administration/x-column-meta.entity",
@@ -26,7 +27,9 @@ function generateApi(cb) {
         //"./lib/services/x-lib.service",
         //"./lib/services/x-lib.controller",
         "./lib/services/x-lib.module",
-        "./lib/serverApi/ExportImportParam"
+        "./lib/services/XAdvancedConsoleLogger",
+        "./lib/services/XEnvVars",
+        "./lib/services/XUtils"
     ];
 
     for (const apiFile of apiFileList) {

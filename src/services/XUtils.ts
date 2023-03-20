@@ -10,9 +10,26 @@ export class XUtils {
      * @param envVar
      */
     static getEnvVarValue(envVarEnum: XEnvVar): string {
-        const value: string | undefined = process.env[envVarEnum];
+        let value: string = XUtils.getEnvVarValueBase(envVarEnum);
+        // value can be also "reference" to another environment variable used by cloud,
+        // for example string value "[process.env.JAWSDB_URL]" means, that we read the real value from environment variable process.env.JAWSDB_URL
+        // (in this variable is URL for MySQL DB on Heroku)
+        if (value.startsWith('[process.env.') && value.endsWith("]")) {
+            const envVarName: string = value.substring('[process.env.'.length, value.length - 1);
+            value = XUtils.getEnvVarValueBase(envVarName);
+        }
+        return value;
+    }
+
+    static getEnvVarValueBoolean(envVarEnum: XEnvVar): boolean {
+        const value: string = XUtils.getEnvVarValue(envVarEnum);
+        return value === "true";
+    }
+
+    private static getEnvVarValueBase(envVarName: string): string {
+        const value: string | undefined = process.env[envVarName];
         if (value === undefined) {
-            throw `Environment variable ${envVarEnum} - value not found. Check configuration file .env*`;
+            throw `Environment variable ${envVarName} - value not found. Check configuration file .env*`;
         }
         return value;
     }

@@ -1,7 +1,7 @@
 import {HttpStatus, Injectable} from '@nestjs/common';
 import {FindResult} from "../serverApi/FindResult";
 import {DataSource, OrderByCondition, SelectQueryBuilder} from "typeorm";
-import {Filters, FindParam, ResultType, SortMeta} from "../serverApi/FindParam";
+import {FindParam, ResultType} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
 import {ReadStream} from "fs";
@@ -10,6 +10,11 @@ import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
 import {CsvDecimalFormat, CsvParam, ExportParam, ExportType} from "../serverApi/ExportImportParam";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XField} from "../serverApi/XEntityMetadata";
+import {
+    DataTableFilterMeta, DataTableFilterMetaData,
+    DataTableOperatorFilterMetaData,
+    DataTableSortMeta, FilterMatchMode
+} from "../serverApi/PrimeFilterSortMeta";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -30,6 +35,7 @@ export class XLazyDataTableService {
         const rootAlias: string = "t0";
 
         const {where, params} = this.createWhere(rootAlias, findParam.filters, assocMap);
+        //console.log("LazyDataTableService.findRows where = " + JSON.stringify(where) + ", params = " + JSON.stringify(params));
 
         const repository = this.dataSource.getRepository(findParam.entity);
 
@@ -118,29 +124,108 @@ export class XLazyDataTableService {
         return this.getFieldFromPath(aliasForAssoc + "." + remainingPath, assocMap);
     }
 
-    createWhere(rootAlias : string, filters : Filters, assocMap : Map<string, string>) : {where: string; params: {};} {
+    // param assocMap is modified inside the function!
+    createWhere(rootAlias: string, filters: DataTableFilterMeta, assocMap: Map<string, string>): {where: string; params: {};} {
+        //console.log("LazyDataTableService.findRows filters = " + JSON.stringify(filters));
         let where : string = "";
         let params : {} = {};
-        for (const [key, value] of Object.entries(filters)) {
-            if (where !== "") {
-                where += " AND ";
+        for (const [filterField, filterValue] of Object.entries(filters)) {
+            let whereItems: string = "";
+            if ('operator' in filterValue) {
+                // composed condition
+                const operatorFilterItem: DataTableOperatorFilterMetaData = filterValue;
+                const whereOperator = " " + operatorFilterItem.operator.toUpperCase() + " "; // AND or OR
+                for (const [index, filterItem] of operatorFilterItem.constraints.entries()) {
+                    const whereItem: string = this.createWhereItem(rootAlias, filterField, filterItem, index, assocMap, params);
+                    if (whereItem !== "") {
+                        if (whereItems !== "") {
+                            whereItems += whereOperator;
+                        }
+                        whereItems += "(" + whereItem + ")";
+                    }
+                }
             }
-            const field : string = this.getFieldFromPath(rootAlias + "." + key, assocMap);
-            // TODO - pouzit paramName :1, :2, :3, ... ?
-            const paramName = field; // TODO - moze paramName obsahovat "."
-            if (value.matchMode === "startsWith") {
-                where += `${field} LIKE :${paramName}`;
-                params[paramName] = value.value + "%";
+            else {
+                // simple condition
+                const filterItem: DataTableFilterMetaData = filterValue;
+                whereItems = this.createWhereItem(rootAlias, filterField, filterItem, undefined, assocMap, params);
             }
-            else if (value.matchMode === "equals") {
-                where += `${field} = :${paramName}`;
-                params[paramName] = value.value;
+            // if there was some condition for current filterField, add it to the result
+            if (whereItems !== "") {
+                if (where !== "") {
+                    where += " AND ";
+                }
+                where += "(" + whereItems + ")";
             }
         }
         return {where: where, params: params};
     }
 
-    createOrderByCondition(rootAlias : string, multiSortMeta : SortMeta[], assocMap : Map<string, string>) : OrderByCondition {
+    // params assocMap, params are modified inside the function!
+    createWhereItem(rootAlias: string, filterField: string, filterItem: DataTableFilterMetaData, paramIndex: number | undefined, assocMap: Map<string, string>, params: {}): string {
+        let whereItem: string = "";
+        // podmienka filterItem.value !== '' je workaround, spravne by bolo na frontende menit '' na null v onChange metode filter input-u
+        // problem je, ze nemame custom input filter, museli by sme ho dorobit (co zas nemusi byt az taka hrozna robota)
+        if (filterItem.value !== null && filterItem.value !== '') {
+            const field: string = this.getFieldFromPath(rootAlias + "." + filterField, assocMap);
+            // TODO - pouzit paramName :1, :2, :3, ... ?
+            let paramName: string = field; // paramName obsahuje "." (napr. t2.attrib)
+            if (paramIndex !== undefined) {
+                paramName += "_" + paramIndex;
+            }
+            switch (filterItem.matchMode) {
+                case FilterMatchMode.STARTS_WITH:
+                    whereItem = this.createWhereItemBase(field, "LIKE", paramName, `${filterItem.value}%`, params);
+                    break;
+                case FilterMatchMode.CONTAINS:
+                    whereItem = this.createWhereItemBase(field, "LIKE", paramName, `%${filterItem.value}%`, params);
+                    break;
+                case FilterMatchMode.NOT_CONTAINS:
+                    whereItem = this.createWhereItemBase(field, "NOT LIKE", paramName, `%${filterItem.value}%`, params);
+                    break;
+                case FilterMatchMode.ENDS_WITH:
+                    whereItem = this.createWhereItemBase(field, "LIKE", paramName, `%${filterItem.value}`, params);
+                    break;
+                case FilterMatchMode.EQUALS:
+                    whereItem = this.createWhereItemBase(field, "=", paramName, filterItem.value, params);
+                    break;
+                case FilterMatchMode.NOT_EQUALS:
+                    whereItem = this.createWhereItemBase(field, "<>", paramName, filterItem.value, params);
+                    break;
+                // case FilterMatchMode.IN:
+                //     // TODO
+                //     //whereItem = `${field} IN (:...${paramName})`;
+                //     //params[paramName] = <value list>;
+                //     break;
+                case FilterMatchMode.LESS_THAN:
+                    whereItem = this.createWhereItemBase(field, "<", paramName, filterItem.value, params);
+                    break;
+                case FilterMatchMode.LESS_THAN_OR_EQUAL_TO:
+                    whereItem = this.createWhereItemBase(field, "<=", paramName, filterItem.value, params);
+                    break;
+                case FilterMatchMode.GREATER_THAN:
+                    whereItem = this.createWhereItemBase(field, ">", paramName, filterItem.value, params);
+                    break;
+                case FilterMatchMode.GREATER_THAN_OR_EQUAL_TO:
+                    whereItem = this.createWhereItemBase(field, ">=", paramName, filterItem.value, params);
+                    break;
+                // case FilterMatchMode.BETWEEN:
+                //     // TODO
+                //     break;
+                default:
+                    console.log(`FilterMatchMode "${filterItem.matchMode}" not implemented`);
+            }
+        }
+        return whereItem;
+    }
+
+    createWhereItemBase(field: string, sqlOperator: string, paramName: string, paramValue: any, params: {}): string {
+        const whereItem: string = `${field} ${sqlOperator} :${paramName}`;
+        params[paramName] = paramValue;
+        return whereItem;
+    }
+
+    createOrderByCondition(rootAlias : string, multiSortMeta : DataTableSortMeta[], assocMap : Map<string, string>) : OrderByCondition {
         let orderByItems : OrderByCondition = {};
         for (const sortMeta of multiSortMeta) {
             const field : string = this.getFieldFromPath(rootAlias + "." + sortMeta.field, assocMap);

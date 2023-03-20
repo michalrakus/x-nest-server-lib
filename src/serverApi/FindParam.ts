@@ -1,16 +1,21 @@
-export interface FilterValue {
-    value : string;
-    matchMode : 'startsWith' | 'equals'; // matchMode ma konstanty napr. startsWith
-}
+import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
 
-export interface Filters {
-    [field: string]: FilterValue; // specialny typ pre object (dictionary) ktory ma dynamicky pocet propertiesov
-}
+// TODO - replaced with DataTableFilterMetaData
+// export interface FilterValue {
+//     value : string;
+//     matchMode : 'startsWith' | 'equals'; // matchMode ma konstanty napr. startsWith
+// }
 
-export interface SortMeta {
-    field : string;
-    order : 1 | -1; // hodnoty 1 alebo -1
-}
+// TODO - replaced with DataTableFilterMeta
+// export interface Filters {
+//     [field: string]: FilterValue; // specialny typ pre object (dictionary) ktory ma dynamicky pocet propertiesov
+// }
+
+// TODO - replace with DataTableSortMeta
+// export interface SortMeta {
+//     field : string;
+//     order : 1 | -1; // hodnoty 1 alebo -1
+// }
 
 export enum ResultType {
     OnlyRowCount,
@@ -22,8 +27,8 @@ export interface FindParam {
     resultType: ResultType;
     first?: number;
     rows?: number; // page size
-    filters: Filters;
-    multiSortMeta?: SortMeta[]; // typ []
+    filters: DataTableFilterMeta;
+    multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields: string[];
 }

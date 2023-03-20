@@ -6,8 +6,6 @@ import {QueryFailedError} from "typeorm";
 export class XExceptionFilter implements ExceptionFilter {
     catch(exception: unknown, host: ArgumentsHost) {
 
-        //console.log("bezi XExceptionFilter exception = " + JSON.stringify(exception));
-
         const ctx = host.switchToHttp();
         const response = ctx.getResponse<Response>();
         const request = ctx.getRequest<Request>();
@@ -43,6 +41,7 @@ export class XExceptionFilter implements ExceptionFilter {
                 exceptionName: exception.name
                 //stacktrace: exception.stack
             };
+            console.log(exception.stack);
         }
         else {
             // exception typu string alebo number (throw 'nieco', resp. throw 300)
@@ -53,6 +52,8 @@ export class XExceptionFilter implements ExceptionFilter {
                 exceptionName: "Unknown exception (string/number)"
             };
         }
+
+        console.log("XExceptionFilter responseBody = " + JSON.stringify(responseBody));
 
         response
             .status(status)
