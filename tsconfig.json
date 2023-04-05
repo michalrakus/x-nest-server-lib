@@ -7,11 +7,12 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
-    "target": "es2017",
+    "target": "es2021",
     "sourceMap": true,
     "outDir": "./lib",
     "baseUrl": "./",
-    "incremental": true
+    "incremental": true,
+    "strictNullChecks": false
   },
   "include": ["src"],
   "exclude": ["node_modules", "test", "lib", "**/*spec.ts"]

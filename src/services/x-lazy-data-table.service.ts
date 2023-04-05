@@ -1,7 +1,7 @@
 import {HttpStatus, Injectable} from '@nestjs/common';
 import {FindResult} from "../serverApi/FindResult";
 import {DataSource, OrderByCondition, SelectQueryBuilder} from "typeorm";
-import {FindParam, ResultType} from "../serverApi/FindParam";
+import {FindParam, ResultType, XCustomFilter} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
 import {ReadStream} from "fs";
@@ -34,7 +34,7 @@ export class XLazyDataTableService {
         // TODO - krajsi nazov aliasu?
         const rootAlias: string = "t0";
 
-        const {where, params} = this.createWhere(rootAlias, findParam.filters, assocMap);
+        const {where, params} = this.createWhere(rootAlias, findParam.filters, findParam.customFilter, assocMap);
         //console.log("LazyDataTableService.findRows where = " + JSON.stringify(where) + ", params = " + JSON.stringify(params));
 
         const repository = this.dataSource.getRepository(findParam.entity);
@@ -85,14 +85,17 @@ export class XLazyDataTableService {
     }
 
     // pozor! metoda vytvara (meni) "assocMap"
-    createSelectItems(rootAlias : string, fields : string[], assocMap : Map<string, string>) : string[] {
-        const selectItems : string[] = [];
-        for (const field of fields) {
-            const lastField: string = this.getFieldFromPath(rootAlias + "." + field, assocMap); // metoda modifikuje assocMap
-            // ak chceme nacitat OneToMany asociaciu, tak pouzijeme path "<asociacia>.*FAKE*", tym zabezpecime aby sa nacitala aj asociacia aj ked nezadame konkretny atribut
-            // je to take male docasne hotfix riesenie
-            if (lastField !== '*FAKE*') {
-                selectItems.push();
+    createSelectItems(rootAlias: string, fields: string[] | undefined, assocMap: Map<string, string>): string[] {
+        const selectItems: string[] = [];
+        // TODO - ked sa budu selectFields pouzivat, treba nacitat defaultny zoznam "fields" z entity
+        if (fields) {
+            for (const field of fields) {
+                const lastField: string = this.getFieldFromPath(rootAlias + "." + field, assocMap); // metoda modifikuje assocMap
+                // ak chceme nacitat OneToMany asociaciu, tak pouzijeme path "<asociacia>.*FAKE*", tym zabezpecime aby sa nacitala aj asociacia aj ked nezadame konkretny atribut
+                // je to take male docasne hotfix riesenie
+                if (lastField !== '*FAKE*') {
+                    selectItems.push(lastField);
+                }
             }
         }
         return selectItems;
@@ -125,38 +128,58 @@ export class XLazyDataTableService {
     }
 
     // param assocMap is modified inside the function!
-    createWhere(rootAlias: string, filters: DataTableFilterMeta, assocMap: Map<string, string>): {where: string; params: {};} {
+    createWhere(rootAlias: string, filters: DataTableFilterMeta | undefined, customFilter: XCustomFilter | undefined, assocMap: Map<string, string>): {where: string; params: {};} {
         //console.log("LazyDataTableService.findRows filters = " + JSON.stringify(filters));
         let where : string = "";
         let params : {} = {};
-        for (const [filterField, filterValue] of Object.entries(filters)) {
-            let whereItems: string = "";
-            if ('operator' in filterValue) {
-                // composed condition
-                const operatorFilterItem: DataTableOperatorFilterMetaData = filterValue;
-                const whereOperator = " " + operatorFilterItem.operator.toUpperCase() + " "; // AND or OR
-                for (const [index, filterItem] of operatorFilterItem.constraints.entries()) {
-                    const whereItem: string = this.createWhereItem(rootAlias, filterField, filterItem, index, assocMap, params);
-                    if (whereItem !== "") {
-                        if (whereItems !== "") {
-                            whereItems += whereOperator;
+        if (filters) {
+            for (const [filterField, filterValue] of Object.entries(filters)) {
+                let whereItems: string = "";
+                if ('operator' in filterValue) {
+                    // composed condition
+                    const operatorFilterItem: DataTableOperatorFilterMetaData = filterValue;
+                    const whereOperator = " " + operatorFilterItem.operator.toUpperCase() + " "; // AND or OR
+                    for (const [index, filterItem] of operatorFilterItem.constraints.entries()) {
+                        const whereItem: string = this.createWhereItem(rootAlias, filterField, filterItem, index, assocMap, params);
+                        if (whereItem !== "") {
+                            if (whereItems !== "") {
+                                whereItems += whereOperator;
+                            }
+                            whereItems += "(" + whereItem + ")";
                         }
-                        whereItems += "(" + whereItem + ")";
                     }
                 }
-            }
-            else {
-                // simple condition
-                const filterItem: DataTableFilterMetaData = filterValue;
-                whereItems = this.createWhereItem(rootAlias, filterField, filterItem, undefined, assocMap, params);
-            }
-            // if there was some condition for current filterField, add it to the result
-            if (whereItems !== "") {
-                if (where !== "") {
-                    where += " AND ";
+                else {
+                    // simple condition
+                    const filterItem: DataTableFilterMetaData = filterValue;
+                    whereItems = this.createWhereItem(rootAlias, filterField, filterItem, undefined, assocMap, params);
                 }
-                where += "(" + whereItems + ")";
+                // if there was some condition for current filterField, add it to the result
+                if (whereItems !== "") {
+                    if (where !== "") {
+                        where += " AND ";
+                    }
+                    where += "(" + whereItems + ")";
+                }
             }
+        }
+        if (customFilter) {
+            // example of customFilter.filter: ([assocField1.field2] BETWEEN :value1 AND :value2) AND ([field3] IN (:...values3))
+            // fields in [] will be replaced with <table alias>.<column>
+            let filter: string = customFilter.filter;
+            let match: string;
+            while ((match = XUtilsCommon.findFirstMatch(/\[[a-zA-Z0-9_.]+\]/, filter)) != null) {
+                const filterField: string = match.substring(1, match.length - 1); // remove []
+                const dbField: string = this.getFieldFromPath(rootAlias + "." + filterField, assocMap);
+                filter = filter.replaceAll(match, dbField);
+            }
+            // TODO - pridat kontrolu ci sa neprepisu (ak nahodou budu mat rovnake key, tak vitazi item z customFilter.values)
+            params = {...params, ...customFilter.values};
+
+            if (where !== "") {
+                where += " AND ";
+            }
+            where += "(" + filter + ")";
         }
         return {where: where, params: params};
     }
@@ -165,7 +188,7 @@ export class XLazyDataTableService {
     createWhereItem(rootAlias: string, filterField: string, filterItem: DataTableFilterMetaData, paramIndex: number | undefined, assocMap: Map<string, string>, params: {}): string {
         let whereItem: string = "";
         // podmienka filterItem.value !== '' je workaround, spravne by bolo na frontende menit '' na null v onChange metode filter input-u
-        // problem je, ze nemame custom input filter, museli by sme ho dorobit (co zas nemusi byt az taka hrozna robota)
+        // problem je, ze nemame custom input filter pre string atributy, museli by sme ho dorobit (co zas nemusi byt az taka hrozna robota)
         if (filterItem.value !== null && filterItem.value !== '') {
             const field: string = this.getFieldFromPath(rootAlias + "." + filterField, assocMap);
             // TODO - pouzit paramName :1, :2, :3, ... ?
@@ -225,11 +248,13 @@ export class XLazyDataTableService {
         return whereItem;
     }
 
-    createOrderByCondition(rootAlias : string, multiSortMeta : DataTableSortMeta[], assocMap : Map<string, string>) : OrderByCondition {
+    createOrderByCondition(rootAlias : string, multiSortMeta : DataTableSortMeta[] | undefined, assocMap : Map<string, string>) : OrderByCondition {
         let orderByItems : OrderByCondition = {};
-        for (const sortMeta of multiSortMeta) {
-            const field : string = this.getFieldFromPath(rootAlias + "." + sortMeta.field, assocMap);
-            orderByItems[field] = (sortMeta.order === 1 ? "ASC" : "DESC");
+        if (multiSortMeta) {
+            for (const sortMeta of multiSortMeta) {
+                const field : string = this.getFieldFromPath(rootAlias + "." + sortMeta.field, assocMap);
+                orderByItems[field] = (sortMeta.order === 1 ? "ASC" : "DESC");
+            }
         }
         return orderByItems;
     }
@@ -344,7 +369,7 @@ export class XLazyDataTableService {
         // TODO - krajsi nazov aliasu?
         const rootAlias: string = "t0";
 
-        const {where, params} = this.createWhere(rootAlias, exportParam.filters, assocMap);
+        const {where, params} = this.createWhere(rootAlias, exportParam.filters, undefined, assocMap);
 
         const repository = this.dataSource.getRepository(exportParam.entity);
 

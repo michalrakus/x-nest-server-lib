@@ -23,12 +23,22 @@ export enum ResultType {
     AllRows
 }
 
+export interface XCustomFilterValues {
+    [key: string]: any;
+}
+
+export interface XCustomFilter {
+    filter: string;
+    values: XCustomFilterValues;
+}
+
 export interface FindParam {
     resultType: ResultType;
     first?: number;
     rows?: number; // page size
-    filters: DataTableFilterMeta;
+    filters?: DataTableFilterMeta;
+    customFilter?: XCustomFilter;
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
-    fields: string[];
+    fields?: string[];
 }

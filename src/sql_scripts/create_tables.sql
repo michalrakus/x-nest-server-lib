@@ -3,7 +3,7 @@ CREATE TABLE x_user (
 	username varchar(64) NOT NULL,
 	password CHAR(60), -- not used if auth2 used
     name varchar(128) NOT NULL, -- family name + surname
-    disabled tinyint(1) NOT NULL default 0,
+    enabled tinyint(1) NOT NULL default 1,
 	PRIMARY KEY (id_x_user)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8;
 

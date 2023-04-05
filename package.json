@@ -15,7 +15,7 @@
     "preinstall": "npx only-allow pnpm"
   },
   "author": "Michal Rakus",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "bcrypt": "^5.1.0",
     "dateformat": "^4.6.3"

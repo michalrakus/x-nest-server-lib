@@ -49,6 +49,9 @@ export class XLibService {
 
     // toto je specialny pripad vseobecnejsieho servisu XLazyDataTableService.findRows, ak resultType === ResultType.AllRows
     // (nedava napr. moznost dotahovat aj asociovane objekty, sortovat podla viacerych stlpcov a pod. - je to take zjednodusene)
+    /**
+     * @deprecated - mal by sa pouzivat lazy findRows + customFilter
+     */
     async findRows(findParamRows: FindParamRows): Promise<any[]> {
         const repository = this.dataSource.getRepository(findParamRows.entity);
         const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
@@ -86,13 +89,16 @@ export class XLibService {
             // (robime to tu a nie na klientovi, lebo ak nam nezbehne save, tak formular zostava otvoreny)
             // (poznamka: este by sa to dalo robit pri serializacii)
             const childRowList = row.object[assoc.name];
-            for (const childRow of childRowList) {
-                if (childRow.__x_generatedRowId) {
-                    // undefined v id-cku sposobi, ze sa priamo vykona INSERT
-                    // (netestuje sa ci zaznam uz existuje v DB (ako je tomu pri null alebo inej ciselnej hodnote))
-                    // kaskadny insert/update potom pekne zafunguje
-                    childRow[xChildEntity.idField] = undefined;
-                    delete childRow.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
+            // pri inserte noveho zaznamu nemusi byt childRowList vytvoreny
+            if (childRowList !== undefined) {
+                for (const childRow of childRowList) {
+                    if (childRow.__x_generatedRowId) {
+                        // undefined v id-cku sposobi, ze sa priamo vykona INSERT
+                        // (netestuje sa ci zaznam uz existuje v DB (ako je tomu pri null alebo inej ciselnej hodnote))
+                        // kaskadny insert/update potom pekne zafunguje
+                        childRow[xChildEntity.idField] = undefined;
+                        delete childRow.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
+                    }
                 }
             }
         }
@@ -100,7 +106,7 @@ export class XLibService {
         let objectReloaded: any = undefined;
 
         // vsetky db operacie dame do jednej transakcie
-        await this.dataSource.manager.transaction(async manager => {
+        await this.dataSource.transaction(async manager => {
             const rowId = row.object[xEntity.idField];
             if (rowId !== undefined) {
                 // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
@@ -110,10 +116,13 @@ export class XLibService {
 
                     const idList: any[] = [];
                     const childRowList = row.object[assoc.name];
-                    for (const childRow of childRowList) {
-                        const id = childRow[xChildEntity.idField];
-                        if (id !== null && id !== undefined) {
-                            idList.push(id);
+                    // pri inserte noveho zaznamu nemusi byt childRowList vytvoreny
+                    if (childRowList !== undefined) {
+                        for (const childRow of childRowList) {
+                            const id = childRow[xChildEntity.idField];
+                            if (id !== null && id !== undefined) {
+                                idList.push(id);
+                            }
                         }
                     }
 

@@ -74,6 +74,20 @@ export class XUtilsCommon {
         const days = ['nedeľa', 'pondelok', 'utorok', 'streda', 'štvrtok', 'piatok', 'sobota'];
         return date ? days[date.getDay()] : undefined;
     }
+
+    static dateAddDays(date: Date | null, days: number): Date | null {
+        let result = null;
+        if (date !== null) {
+            result = new Date(date);
+            result.setDate(result.getDate() + days);
+        }
+        return result;
+    }
+
+    static findFirstMatch(pattern: RegExp, value: string): string | null {
+        const match: RegExpExecArray | null = pattern.exec(value);
+        return match != null ? match[0] : null;
+    }
 }
 
 // nevedel som importnut dateFormat, tak som to dal sem aby som nemusel vsade pouzivat require("dateformat")

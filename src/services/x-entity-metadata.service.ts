@@ -139,6 +139,14 @@ export class XEntityMetadataService {
         return this.getXAssoc(xEntity, xEntity.assocToManyMap, assocField);
     }
 
+    getXAssocToOneByAssocEntity(xEntity: XEntity, assocEntityName: string): XAssoc {
+        return this.getXAssocByAssocEntity(xEntity, xEntity.assocToOneMap, assocEntityName);
+    }
+
+    getXAssocToManyByAssocEntity(xEntity: XEntity, assocEntityName: string): XAssoc {
+        return this.getXAssocByAssocEntity(xEntity, xEntity.assocToManyMap, assocEntityName);
+    }
+
     getXEntityForAssocToOne(xEntity: XEntity, assocField: string): XEntity {
         return this.getXEntityForAssoc(this.getXAssocToOne(xEntity, assocField));
     }
@@ -164,6 +172,24 @@ export class XEntityMetadataService {
             throw `Assoc ${assocField} was not found in entity = ${xEntity.name}`;
         }
         return xAssoc;
+    }
+
+    private getXAssocByAssocEntity(xEntity: XEntity, assocMap: XAssocMap, assocEntityName: string): XAssoc {
+        let xAssocFound: XAssoc | undefined = undefined;
+        for (const [key, xAssoc] of Object.entries(assocMap)) {
+            if (xAssoc.entityName === assocEntityName) {
+                if (xAssocFound === undefined) {
+                    xAssocFound = xAssoc;
+                }
+                else {
+                    throw `In entity ${xEntity.name} found more then 1 assoc for assocEntityName = ${assocEntityName}`;
+                }
+            }
+        }
+        if (xAssocFound === undefined) {
+            throw `Assoc for assocEntityName = ${assocEntityName} not found in entity ${xEntity.name}`;
+        }
+        return xAssocFound;
     }
 
     private getXEntityForAssoc(xAssoc: XAssoc): XEntity {
