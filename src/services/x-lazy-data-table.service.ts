@@ -369,7 +369,7 @@ export class XLazyDataTableService {
         // TODO - krajsi nazov aliasu?
         const rootAlias: string = "t0";
 
-        const {where, params} = this.createWhere(rootAlias, exportParam.filters, undefined, assocMap);
+        const {where, params} = this.createWhere(rootAlias, exportParam.filters, exportParam.customFilter, assocMap);
 
         const repository = this.dataSource.getRepository(exportParam.entity);
 

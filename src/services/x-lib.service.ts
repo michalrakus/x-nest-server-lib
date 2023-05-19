@@ -313,13 +313,14 @@ export class XLibService {
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
         selectQueryBuilder.where("xUser.username = :username", {username: userEmail});
         const xUser: XUser | null = await selectQueryBuilder.getOne();
-        if (xUser !== null) {
-            // synchronizacia udajov
-            if (xPostLoginRequest.username !== undefined) {
-                xUser.name = xPostLoginRequest.username;
-                await repository.save(xUser);
-            }
-        }
+        // synchronizaciu udajov vypneme, lebo pri auth0 kontach nam prepisuje meno e-mailom
+        // if (xUser !== null) {
+        //     // synchronizacia udajov
+        //     if (xPostLoginRequest.username !== undefined) {
+        //         xUser.name = xPostLoginRequest.username;
+        //         await repository.save(xUser);
+        //     }
+        // }
         return {xUser: xUser !== null ? xUser : undefined};
     }
 }

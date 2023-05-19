@@ -1,4 +1,5 @@
 import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
+import {XCustomFilter} from "./FindParam";
 
 // ExportType a ExportParam sa pouzivaju v samostatnom servise ktory data streamuje (na rozdiel od ResultType.AllRows ktory by sa ani nemal pouzivat)
 
@@ -10,6 +11,7 @@ export enum ExportType {
 export interface ExportParam {
     exportType: ExportType;
     filters: DataTableFilterMeta;
+    customFilter?: XCustomFilter;
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields: string[];
