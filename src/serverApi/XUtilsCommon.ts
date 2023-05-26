@@ -38,6 +38,16 @@ export class XUtilsCommon {
         }
     }
 
+    static getPathToAssoc(path: string): string {
+        const posDot : number = path.lastIndexOf(".");
+        if (posDot === -1) {
+            throw `Path to assoc could not be retrieved. Path ${path} must have at least 2 items.`;
+        }
+        else {
+            return path.substring(0, posDot);
+        }
+    }
+
     static isSingleField(path: string): boolean {
         return path.indexOf(".") === -1;
     }

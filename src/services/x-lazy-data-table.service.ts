@@ -9,7 +9,7 @@ import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transforme
 import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
 import {CsvDecimalFormat, CsvParam, ExportParam, ExportType} from "../serverApi/ExportImportParam";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
-import {XField} from "../serverApi/XEntityMetadata";
+import {XEntity, XField} from "../serverApi/XEntityMetadata";
 import {
     DataTableFilterMeta, DataTableFilterMetaData,
     DataTableOperatorFilterMetaData,
@@ -43,8 +43,12 @@ export class XLazyDataTableService {
 
         let rowCount: number;
         if (findParam.resultType === ResultType.OnlyRowCount || findParam.resultType === ResultType.RowCountAndPagedRows) {
+            const xEntity: XEntity = this.xEntityMetadataService.getXEntity(findParam.entity);
             selectQueryBuilder = repository.createQueryBuilder(rootAlias);
-            selectQueryBuilder.select("COUNT(1)", "count");
+            // povodne tu bol COUNT(1) ale koli where podmienkam na OneToMany asociaciach sme zmenili na COUNT(DISTINCT t0.id)
+            // da sa zoptimalizovat, ze COUNT(DISTINCT t0.id) sa bude pouzivat len v pripade ze je pouzita where podmienka na OneToMany asociacii
+            // (ale potom to treba nejako detekovat, zatial dame vzdy COUNT(DISTINCT t0.id))
+            selectQueryBuilder.select(`COUNT(DISTINCT ${rootAlias}.${xEntity.idField})`, "count");
             for (const [field, alias] of assocMap.entries()) {
                 selectQueryBuilder.leftJoin(field, alias);
             }
@@ -210,9 +214,11 @@ export class XLazyDataTableService {
                     whereItem = this.createWhereItemBase(field, "LIKE", paramName, `%${filterItem.value}`, params);
                     break;
                 case FilterMatchMode.EQUALS:
+                case FilterMatchMode.DATE_IS:
                     whereItem = this.createWhereItemBase(field, "=", paramName, filterItem.value, params);
                     break;
                 case FilterMatchMode.NOT_EQUALS:
+                case FilterMatchMode.DATE_IS_NOT:
                     whereItem = this.createWhereItemBase(field, "<>", paramName, filterItem.value, params);
                     break;
                 // case FilterMatchMode.IN:
@@ -221,20 +227,31 @@ export class XLazyDataTableService {
                 //     //params[paramName] = <value list>;
                 //     break;
                 case FilterMatchMode.LESS_THAN:
+                case FilterMatchMode.DATE_BEFORE:
                     whereItem = this.createWhereItemBase(field, "<", paramName, filterItem.value, params);
                     break;
                 case FilterMatchMode.LESS_THAN_OR_EQUAL_TO:
                     whereItem = this.createWhereItemBase(field, "<=", paramName, filterItem.value, params);
                     break;
                 case FilterMatchMode.GREATER_THAN:
+                case FilterMatchMode.DATE_AFTER:
                     whereItem = this.createWhereItemBase(field, ">", paramName, filterItem.value, params);
                     break;
                 case FilterMatchMode.GREATER_THAN_OR_EQUAL_TO:
                     whereItem = this.createWhereItemBase(field, ">=", paramName, filterItem.value, params);
                     break;
-                // case FilterMatchMode.BETWEEN:
-                //     // TODO
-                //     break;
+                case FilterMatchMode.BETWEEN:
+                    if (Array.isArray(filterItem.value) && filterItem.value.length === 2) {
+                        const value1: any | null = filterItem.value[0];
+                        const value2: any | null = filterItem.value[1];
+                        const whereItem1: string | "" = (value1 !== null ? this.createWhereItemBase(field, ">=", paramName + '_1', value1, params) : "");
+                        const whereItem2: string | "" = (value2 !== null ? this.createWhereItemBase(field, "<=", paramName + '_2', value2, params) : "");
+                        whereItem = this.whereItemAnd(whereItem1, whereItem2);
+                    }
+                    else {
+                        console.log(`FilterMatchMode "${filterItem.matchMode}": value is expected to be array of length = 2`);
+                    }
+                    break;
                 default:
                     console.log(`FilterMatchMode "${filterItem.matchMode}" not implemented`);
             }
@@ -245,6 +262,17 @@ export class XLazyDataTableService {
     createWhereItemBase(field: string, sqlOperator: string, paramName: string, paramValue: any, params: {}): string {
         const whereItem: string = `${field} ${sqlOperator} :${paramName}`;
         params[paramName] = paramValue;
+        return whereItem;
+    }
+
+    whereItemAnd(whereItem1: string | "", whereItem2: string | ""): string | "" {
+        let whereItem: string;
+        if (whereItem1 !== "" && whereItem2 !== "") {
+            whereItem = `(${whereItem1} AND ${whereItem2})`;
+        }
+        else {
+            whereItem = whereItem1 + whereItem2;
+        }
         return whereItem;
     }
 

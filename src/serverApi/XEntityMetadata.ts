@@ -6,8 +6,7 @@ export interface XEntity {
     name: string;
     idField: string;
     fieldMap: XFieldMap;
-    assocToOneMap: XAssocMap;
-    assocToManyMap: XAssocMap;
+    assocMap: XAssocMap;
 }
 
 export interface XFieldMap {
@@ -28,7 +27,11 @@ export interface XField {
     width?: number;
 }
 
+// copy of RelationMetadata.RelationType
+export type XRelationType = "one-to-one" | "one-to-many" | "many-to-one" | "many-to-many";
+
 export interface XAssoc {
+    relationType: XRelationType;
     name: string;
     entityName: string; // entita na druhej strane asociacie
     inverseAssocName?: string; // opacna asociacia

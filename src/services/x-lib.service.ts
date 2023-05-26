@@ -7,7 +7,7 @@ import {
 } from "typeorm";
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
-import {XAssocMap, XEntity} from "../serverApi/XEntityMetadata";
+import {XAssoc, XAssocMap, XEntity} from "../serverApi/XEntityMetadata";
 import {XUser} from "../administration/xuser.entity";
 import {XUserAuthenticationRequest, XUserAuthenticationResponse} from "../serverApi/XUserAuthenticationIfc";
 import {XUtils} from "./XUtils";
@@ -81,8 +81,8 @@ export class XLibService {
             delete row.object.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
         }
 
-        const assocMap: XAssocMap = xEntity.assocToManyMap;
-        for (const [assocName, assoc] of Object.entries(assocMap)) {
+        const assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]);
+        for (const assoc of assocToManyList) {
             const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
             // uprava toho co prislo z klienta - vynullujeme umelo vytvorene id-cka
@@ -111,7 +111,7 @@ export class XLibService {
             if (rowId !== undefined) {
                 // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
                 // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
-                for (const [assocName, assoc] of Object.entries(assocMap)) {
+                for (const assoc of assocToManyList) {
                     const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
                     const idList: any[] = [];
@@ -168,8 +168,8 @@ export class XLibService {
         // vsetky db operacie dame do jednej transakcie
         await this.dataSource.manager.transaction(async manager => {
             // prejdeme vsetky *ToMany asociacie a zmazeme ich child zaznamy
-            const assocMap: XAssocMap = xEntity.assocToManyMap;
-            for (const [assocName, assoc] of Object.entries(assocMap)) {
+            const assocList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]);
+            for (const assoc of assocList) {
                 const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
                 if (assoc.inverseAssocName === undefined) {
                     throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
