@@ -193,7 +193,7 @@ export class XEntityMetadataService {
         return xAssocList;
     }
 
-    private getXAssoc(xEntity: XEntity, assocField: string, relationTypeList?: XRelationType[]): XAssoc {
+    public getXAssoc(xEntity: XEntity, assocField: string, relationTypeList?: XRelationType[]): XAssoc {
         const xAssoc: XAssoc = xEntity.assocMap[assocField];
         if (xAssoc === undefined) {
             throw `Assoc ${assocField} was not found in entity = ${xEntity.name}`;

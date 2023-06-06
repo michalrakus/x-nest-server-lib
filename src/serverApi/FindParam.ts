@@ -32,6 +32,18 @@ export interface XCustomFilter {
     values: XCustomFilterValues;
 }
 
+export enum XAggregateType {
+    Min = "MIN",
+    Max = "MAX",
+    Sum = "SUM",
+    Avg = "AVG"
+}
+
+export interface XAggregateItem {
+    field: string;
+    aggregateType: XAggregateType;
+}
+
 export interface FindParam {
     resultType: ResultType;
     first?: number;
@@ -41,4 +53,5 @@ export interface FindParam {
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields?: string[];
+    aggregateItems?: XAggregateItem[];
 }
