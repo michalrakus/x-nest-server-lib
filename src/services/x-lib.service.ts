@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
-    DataSource,
+    DataSource, EntityManager,
     EntityMetadata,
     OrderByCondition,
     SelectQueryBuilder
@@ -68,10 +68,22 @@ export class XLibService {
         return await selectQueryBuilder.getMany();
     }
 
-    async saveRow(row: SaveRowParam): Promise<any> {
+    saveRow(row: SaveRowParam): Promise<any> {
+        // vsetky db operacie dame do jednej transakcie
+        return this.dataSource.transaction<any>(manager => this.saveRowInTransaction(manager, row));
+    }
+
+    async saveRowInTransaction(manager: EntityManager, row: SaveRowParam): Promise<any> {
 
         // saveRow sluzi aj pre insert (id-cko je undefined, TypeORM robi rovno insert)
         // aj pre update (id-cko je cislo, TypeORM najprv cez select zistuje ci dany zaznam existuje)
+
+        // poznamka: ak sa maju pri zavolani save(<master>) zapisovat aj detail zaznamy,
+        // treba na OneToMany asociaciu zapisat: {cascade: ["insert", "update", "remove"]}
+        // ("remove" netreba ale ten by sme chceli uplatnovat pri removeRow)
+
+        // poznamka 2: na options na asociacii (OneToMany ale aj na inych) som nasiel atribut orphanedRowAction
+        // je pravdepodobne, ze tento atribut robi tu odprogramovany "orphan removal"
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
 
@@ -81,7 +93,11 @@ export class XLibService {
             delete row.object.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
         }
 
-        const assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]);
+        let assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]);
+        const rowId = row.object[xEntity.idField];
+        const insert: boolean = (rowId === undefined);
+        assocToManyList = assocToManyList.filter(insert ? (assoc: XAssoc) => assoc.isCascadeInsert : (assoc: XAssoc) => assoc.isCascadeUpdate);
+
         for (const assoc of assocToManyList) {
             const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
@@ -103,93 +119,96 @@ export class XLibService {
             }
         }
 
-        let objectReloaded: any = undefined;
+        // ak mame update
+        if (!insert) {
+            // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
+            // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
+            for (const assoc of assocToManyList) {
+                const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
-        // vsetky db operacie dame do jednej transakcie
-        await this.dataSource.transaction(async manager => {
-            const rowId = row.object[xEntity.idField];
-            if (rowId !== undefined) {
-                // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
-                // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
-                for (const assoc of assocToManyList) {
-                    const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
-
-                    const idList: any[] = [];
-                    const childRowList = row.object[assoc.name];
-                    // pri inserte noveho zaznamu nemusi byt childRowList vytvoreny
-                    if (childRowList !== undefined) {
-                        for (const childRow of childRowList) {
-                            const id = childRow[xChildEntity.idField];
-                            if (id !== null && id !== undefined) {
-                                idList.push(id);
-                            }
+                const idList: any[] = [];
+                const childRowList = row.object[assoc.name];
+                // pri inserte noveho zaznamu nemusi byt childRowList vytvoreny
+                if (childRowList !== undefined) {
+                    for (const childRow of childRowList) {
+                        const id = childRow[xChildEntity.idField];
+                        if (id !== null && id !== undefined) {
+                            idList.push(id);
                         }
                     }
+                }
 
-                    if (assoc.inverseAssocName === undefined) {
-                        throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
-                    }
-                    const repository = manager.getRepository(xChildEntity.name);
-                    const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
-                    // poznamka: "t0.${assoc.inverseAssocName}.${xEntity.idField}" sa transformuje na "t0.<idField>" v sql, ne-joinuje sa tabulka pre xEntity
-                    selectQueryBuilder.where(`t0.${assoc.inverseAssocName}.${xEntity.idField} = :rowId`, {rowId: rowId});
-                    if (idList.length > 0) {
-                        selectQueryBuilder.andWhere(`t0.${xChildEntity.idField} NOT IN (:...idList)`, {idList: idList});
-                    }
-                    const rowList: any[] = await selectQueryBuilder.getMany();
-                    //console.log("Nasli sme na zrusenie:" + rowList.length);
-                    //console.log(rowList);
-                    if (rowList.length > 0) {
-                        //await repository.remove(rowList);
-                        // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
-                        const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
-                        await repository.delete(rowIdList);
-                    }
+                if (assoc.inverseAssocName === undefined) {
+                    throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
+                }
+                const repository = manager.getRepository(xChildEntity.name);
+                const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder("t0");
+                // poznamka: ManyToOne/OneToOne asociacia "t0.${assoc.inverseAssocName}" sa transformuje na "t0.<idField>" v sql
+                selectQueryBuilder.where(`t0.${assoc.inverseAssocName} = :rowId`, {rowId: rowId});
+                if (idList.length > 0) {
+                    selectQueryBuilder.andWhere(`t0.${xChildEntity.idField} NOT IN (:...idList)`, {idList: idList});
+                }
+                const rowList: any[] = await selectQueryBuilder.getMany();
+                //console.log("Nasli sme na zrusenie:" + rowList.length);
+                //console.log(rowList);
+                if (rowList.length > 0) {
+                    //await repository.remove(rowList);
+                    // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
+                    const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
+                    await repository.delete(rowIdList);
                 }
             }
+        }
 
-            // samotny insert/update entity
-            const repository = manager.getRepository(row.entity);
-            //console.log(row.object);
-            //const date = row.object.carDate;
-            //console.log(typeof date);
-            objectReloaded = await repository.save(row.object);
-        });
+        // samotny insert/update entity
+        const repository = manager.getRepository(row.entity);
+        //console.log(row.object);
+        //const date = row.object.carDate;
+        //console.log(typeof date);
+        const objectReloaded: any = await repository.save(row.object);
 
         return row.reload ? objectReloaded : {};
     }
 
-    async removeRow(row: RemoveRowParam) {
+    removeRow(row: RemoveRowParam): Promise<void> {
+        // vsetky db operacie dame do jednej transakcie
+        return this.dataSource.transaction(manager => this.removeRowInTransaction(manager, row));
+    }
 
+    async removeRowInTransaction(manager: EntityManager, row: RemoveRowParam): Promise<void> {
         // TypeORM neposkytuje kaskadny delete, preto je tu kaskadny delete dorobeny
+
+        // na OneToMany asociacii standardne mame {cascade: ["insert", "update", "remove"]}
+        // "insert" a "update" su potrebne aby sa pri zavolani save(<master>) zapisovali aj detail zaznamy,
+        // pre "remove" by som ocakaval ze sa uplatni pre remove(<master>) ale nefunguje to (ani ked zavolam remove namiesto delete)
+        // ani pridanie onDelete: "CASCADE" na OneToMany, resp. ManyToOne nepomohlo...
+        // ani poslanie celeho json objektu (aj s child zaznamami) nepomohlo... <- to je asi nutne ak to ma zafungovat...
+        // preto sme kaskadny delete dorobili - TODO - vykonat len ak mame "remove"
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
 
-        // vsetky db operacie dame do jednej transakcie
-        await this.dataSource.manager.transaction(async manager => {
-            // prejdeme vsetky *ToMany asociacie a zmazeme ich child zaznamy
-            const assocList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]);
-            for (const assoc of assocList) {
-                const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
-                if (assoc.inverseAssocName === undefined) {
-                    throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
-                }
-                const childRepository = manager.getRepository(xChildEntity.name);
-                const selectQueryBuilder: SelectQueryBuilder<unknown> = childRepository.createQueryBuilder("t0");
-                // poznamka: "t0.${assoc.inverseAssocName}.${xEntity.idField}" sa transformuje na "t0.<idField>" v sql, ne-joinuje sa tabulka pre xEntity
-                selectQueryBuilder.where(`t0.${assoc.inverseAssocName}.${xEntity.idField} = :rowId`, {rowId: row.id});
-                const rowList: any[] = await selectQueryBuilder.getMany();
-                if (rowList.length > 0) {
-                    // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
-                    const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
-                    await childRepository.delete(rowIdList);
-                }
+        // prejdeme vsetky *ToMany asociacie (ktore maju cascade "remove") a zmazeme ich child zaznamy
+        const assocList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        for (const assoc of assocList) {
+            const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
+            if (assoc.inverseAssocName === undefined) {
+                throw `Assoc ${xEntity.name}.${assoc.name} has no inverse assoc.`;
             }
+            const childRepository = manager.getRepository(xChildEntity.name);
+            const selectQueryBuilder: SelectQueryBuilder<unknown> = childRepository.createQueryBuilder("t0");
+            // poznamka: ManyToOne/OneToOne asociacia "t0.${assoc.inverseAssocName}" sa transformuje na "t0.<idField>" v sql
+            selectQueryBuilder.where(`t0.${assoc.inverseAssocName} = :rowId`, {rowId: row.id});
+            const rowList: any[] = await selectQueryBuilder.getMany();
+            if (rowList.length > 0) {
+                // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
+                const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
+                await childRepository.delete(rowIdList);
+            }
+        }
 
-            // samotny delete entity
-            const repository = manager.getRepository(row.entity);
-            await repository.delete(row.id);
-        });
+        // samotny delete entity
+        const repository = manager.getRepository(row.entity);
+        await repository.delete(row.id);
 
         /*
             POZNAMKA: efektivnejsie by bolo pouzivat DeleteQueryBuilder (priamy DELETE FROM ... WHERE <fk-stlpec> = <id>),

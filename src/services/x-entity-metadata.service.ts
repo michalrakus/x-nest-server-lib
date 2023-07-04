@@ -89,7 +89,16 @@ export class XEntityMetadataService {
             const assocName = relationMetadata.propertyName;
             const inverseAssoc = relationMetadata.inverseRelation?.propertyName;
             // poznamka: relationMetadata.isNullable - default je true (na rozdiel od columnMetadata!), ale mozno to v buducnosti zjednotia so stlpcami, takze je lepsie to vzdy explicitne uviest
-            assocMap[assocName] = ({relationType: relationMetadata.relationType, name: assocName, entityName: relationMetadata.inverseEntityMetadata.name, inverseAssocName: inverseAssoc, isNullable: relationMetadata.isNullable});
+            assocMap[assocName] = ({
+                relationType: relationMetadata.relationType,
+                name: assocName,
+                entityName: relationMetadata.inverseEntityMetadata.name,
+                inverseAssocName: inverseAssoc,
+                isCascadeInsert: relationMetadata.isCascadeInsert,
+                isCascadeUpdate: relationMetadata.isCascadeUpdate,
+                isCascadeRemove: relationMetadata.isCascadeRemove,
+                isNullable: relationMetadata.isNullable
+            });
         }
         return assocMap;
     }

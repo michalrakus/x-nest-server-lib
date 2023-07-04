@@ -24,11 +24,12 @@ function generateApi(cb) {
         //"./lib/services/x-entity-metadata.service",
         "./lib/services/x-exception.filter",
         //"./lib/services/x-lazy-data-table.service",
-        //"./lib/services/x-lib.service",
+        "./lib/services/x-lib.service",
         //"./lib/services/x-lib.controller",
         "./lib/services/x-lib.module",
         "./lib/services/XAdvancedConsoleLogger",
         "./lib/services/XEnvVars",
+        "./lib/services/XOptimisticLockingSubscriber",
         "./lib/services/XUtils"
     ];
 

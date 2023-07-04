@@ -1,4 +1,4 @@
-import {Column, Entity, PrimaryGeneratedColumn} from "typeorm";
+import {Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, VersionColumn} from "typeorm";
 
 @Entity('x_user')
 export class XUser {
@@ -17,4 +17,14 @@ export class XUser {
 
     @Column({nullable: false})
     enabled: boolean;
+
+    @Column({name: 'modif_date', type: 'datetime', nullable: true})
+    modifDate?: Date;
+
+    @ManyToOne(() => XUser, {nullable: true})
+    @JoinColumn({ name: 'modif_x_user_id' })
+    modifXUser: XUser;
+
+    @VersionColumn()
+    version: number;
 }

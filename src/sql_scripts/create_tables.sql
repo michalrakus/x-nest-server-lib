@@ -4,10 +4,14 @@ CREATE TABLE x_user (
 	password CHAR(60), -- not used if auth2 used
     name varchar(128) NOT NULL, -- family name + surname
     enabled tinyint(1) NOT NULL default 1,
+    modif_date DATETIME,
+    modif_x_user_id int,
+    version INT NOT NULL,
 	PRIMARY KEY (id_x_user)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE x_user ADD CONSTRAINT uq_x_user_username UNIQUE KEY(username);
+ALTER TABLE x_user ADD CONSTRAINT x_user_x_user FOREIGN KEY (modif_x_user_id) REFERENCES x_user (id_x_user);
 
 CREATE TABLE x_browse_meta (
 	id_x_browse_meta int NOT NULL auto_increment,

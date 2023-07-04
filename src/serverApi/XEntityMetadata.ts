@@ -35,5 +35,8 @@ export interface XAssoc {
     name: string;
     entityName: string; // entita na druhej strane asociacie
     inverseAssocName?: string; // opacna asociacia
+    isCascadeInsert: boolean;
+    isCascadeUpdate: boolean;
+    isCascadeRemove: boolean;
     isNullable: boolean; // pouzivane (zatial) len pre *ToOne asociacie
 }

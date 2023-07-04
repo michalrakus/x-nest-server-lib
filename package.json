@@ -52,14 +52,14 @@
     "@nestjs/core": "^9.3.9",
     "@nestjs/passport": "^9.0.3",
     "@nestjs/platform-express": "^9.3.9",
-    "@nestjs/typeorm": "^9.0.1",
+    "@nestjs/typeorm": "^10.0.0",
     "jwks-rsa": "^3.0.1",
     "mysql2": "^2.3.3",
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",
-    "typeorm": "^0.3.12"
+    "typeorm": "^0.3.17"
   },
   "files": [
     "lib/**/*",
