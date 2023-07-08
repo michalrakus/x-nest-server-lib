@@ -18,6 +18,9 @@ import * as bcrypt from 'bcrypt';
 import {FindParamRows} from "./FindParamRows";
 import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
 import {XEnvVar} from "./XEnvVars";
+import {join} from "path";
+import {unlinkSync} from "fs";
+import {XRowIdListToRemove} from "./XRowIdListToRemove";
 
 @Injectable()
 export class XLibService {
@@ -68,12 +71,17 @@ export class XLibService {
         return await selectQueryBuilder.getMany();
     }
 
-    saveRow(row: SaveRowParam): Promise<any> {
+    async saveRow(row: SaveRowParam): Promise<any> {
         // vsetky db operacie dame do jednej transakcie
-        return this.dataSource.transaction<any>(manager => this.saveRowInTransaction(manager, row));
+        const fileListToRemove: Array<string> = new Array<string>();
+        const objectReloaded: any = await this.dataSource.transaction<any>(manager => this.saveRowInTransaction(manager, row, fileListToRemove));
+        // transakcia bola commitnuta, zmazeme pripadne subory
+        // (ak by sme mazali pred commitom a commit by nepresiel, vznikla by inkonzistencia; ak neprejde zmazanie suboru neni to az taka tragedia)
+        this.removeFiles(fileListToRemove);
+        return objectReloaded;
     }
 
-    async saveRowInTransaction(manager: EntityManager, row: SaveRowParam): Promise<any> {
+    async saveRowInTransaction(manager: EntityManager, row: SaveRowParam, fileListToRemove?: Array<string>): Promise<any> {
 
         // saveRow sluzi aj pre insert (id-cko je undefined, TypeORM robi rovno insert)
         // aj pre update (id-cko je cislo, TypeORM najprv cez select zistuje ci dany zaznam existuje)
@@ -153,9 +161,11 @@ export class XLibService {
                 //console.log(rowList);
                 if (rowList.length > 0) {
                     //await repository.remove(rowList);
-                    // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
                     const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
-                    await repository.delete(rowIdList);
+                    // tato metodka vymaze aj pripadne asociovane objekty (metodka funguje pre *toMany asociacie ako aj pre *toOne asociacie)
+                    await this.removeRowsInTransaction(manager, xChildEntity, rowIdList, fileListToRemove);
+                    // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
+                    //await repository.delete(rowIdList);
                 }
             }
         }
@@ -170,20 +180,131 @@ export class XLibService {
         return row.reload ? objectReloaded : {};
     }
 
-    removeRow(row: RemoveRowParam): Promise<void> {
+    async removeRow(row: RemoveRowParam): Promise<void> {
         // vsetky db operacie dame do jednej transakcie
-        return this.dataSource.transaction(manager => this.removeRowInTransaction(manager, row));
+        const fileListToRemove: Array<string> = new Array<string>();
+        await this.dataSource.transaction(manager => this.removeRowInTransaction(manager, row, fileListToRemove));
+        // transakcia bola commitnuta, zmazeme pripadne subory
+        // (ak by sme mazali pred commitom a commit by nepresiel, vznikla by inkonzistencia; ak neprejde zmazanie suboru neni to az taka tragedia)
+        this.removeFiles(fileListToRemove);
     }
 
-    async removeRowInTransaction(manager: EntityManager, row: RemoveRowParam): Promise<void> {
-        // TypeORM neposkytuje kaskadny delete, preto je tu kaskadny delete dorobeny
+    async removeRowInTransaction(manager: EntityManager, row: RemoveRowParam, fileListToRemove?: Array<string>): Promise<void> {
 
         // na OneToMany asociacii standardne mame {cascade: ["insert", "update", "remove"]}
         // "insert" a "update" su potrebne aby sa pri zavolani save(<master>) zapisovali aj detail zaznamy,
         // pre "remove" by som ocakaval ze sa uplatni pre remove(<master>) ale nefunguje to (ani ked zavolam remove namiesto delete)
         // ani pridanie onDelete: "CASCADE" na OneToMany, resp. ManyToOne nepomohlo...
         // ani poslanie celeho json objektu (aj s child zaznamami) nepomohlo... <- to je asi nutne ak to ma zafungovat...
-        // preto sme kaskadny delete dorobili - TODO - vykonat len ak mame "remove"
+        // preto sme kaskadny delete dorobili, funguje cez vsetky asociacie ktore maju cascade "remove"
+        // navyse tu mame aj mazanie suborov, ak strom objektov obsahuje zaznam XFile
+
+        const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
+        return this.removeRowsInTransaction(manager, xEntity, [row.id], fileListToRemove);
+    }
+
+    async removeRowsInTransaction(manager: EntityManager, xEntity: XEntity, rowIdList: any[], fileListToRemove?: Array<string>) {
+        // vygenerujeme query - jednym selectom nacitame cely strom zaznamov ktory ideme vymazat
+        // prejdeme rekurzivne cez vsetky asociacie ktore maju nastaveny cascade "remove"
+        const alias: string = "t";
+        const repository = manager.getRepository(xEntity.name);
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder(alias);
+        // volanie this.addAssocsOfEntity pridava left join-y do selectQueryBuilder
+        if (this.addAssocsOfEntity(selectQueryBuilder, xEntity, alias)) {
+            // ak sme pridali aspon 1 leftJoin
+            selectQueryBuilder.whereInIds(rowIdList);
+
+            // nacitame cely strom a zapiseme si id-cka na remove (v spravnom poradi)
+            const rowList: any[] = await selectQueryBuilder.getMany();
+            const rowIdListToRemove: XRowIdListToRemove = new XRowIdListToRemove();
+            for (const row of rowList) {
+                this.addRowOfEntityToRemove(xEntity, row, rowIdListToRemove, fileListToRemove);
+            }
+
+            // vymazeme nazbierane id-cka
+            for (const rowIdList of rowIdListToRemove.entityRowIdListList) {
+                await this.deleteRows(manager, rowIdList.entity, rowIdList.rowIdList);
+            }
+        }
+        else {
+            // optimalizacia
+            // nepridali sme ani 1 leftJoin, netreba robit SELECT celeho stromu, usetrime ho a ideme priamo na delete
+            await this.deleteRows(manager, xEntity.name, rowIdList);
+        }
+    }
+
+    addAssocsOfEntity(selectQueryBuilder: SelectQueryBuilder<unknown>, xEntity: XEntity, alias: string): boolean {
+        // prejdeme vsetky asociacie (ktore maju cascade "remove", aj *toMany aj *toOne) a pridame ich do query
+        let leftJoinAdded: boolean = false;
+        const assocList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        for (const [index, assoc] of assocList.entries()) {
+            const aliasForAssoc: string = `${alias}_${index}`; // chceme mat unique alias v ramci celeho stromu, tak vytvarame nieco ako napr. t_2_0_1
+            selectQueryBuilder.leftJoinAndSelect(`${alias}.${assoc.name}`, aliasForAssoc);
+            leftJoinAdded = true;
+            const xAssocEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
+            this.addAssocsOfEntity(selectQueryBuilder, xAssocEntity, `${alias}_${index}`);
+        }
+        return leftJoinAdded;
+    }
+
+    addRowOfEntityToRemove(xEntity: XEntity, row: any, rowIdListToRemove: XRowIdListToRemove, fileListToRemove?: Array<string>) {
+        // vymazeme "row" aj s jeho asociovanymi objektmi
+        // musime mazat v spravnom poradi aby sme nenarusili FK constrainty (a ak asociacie vytvaraju cyklus, tak nam ani spravne poradie nepomoze...)
+
+        // najprv *toMany asociacie
+        const assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        for (const assoc of assocToManyList) {
+            const assocRowList: any[] = row[assoc.name];
+            for (const assocRow of assocRowList) {
+                this.addRowOfEntityToRemove(this.xEntityMetadataService.getXEntity(assoc.entityName), assocRow, rowIdListToRemove, fileListToRemove);
+            }
+        }
+
+        // ulozime id-cko zaznamu "row" na remove
+        const rowId: any = row[xEntity.idField];
+        rowIdListToRemove.addRowId(xEntity.name, rowId);
+        // ak sa jedna o row typu XFile, vymazeme aj subor (ak existuje)
+        if (fileListToRemove !== undefined && xEntity.name === "XFile") {
+            // TODO - cast na XFile
+            // ak row.pathName === null, subor je zapisany v DB v zazname "row"
+            if (row.pathName !== null) {
+                // subor mazeme z adresara app-files/x-files/<xFile.pathName>
+                fileListToRemove.push(join(XUtils.getXFilesDir(), row.pathName));
+            }
+        }
+
+        // teraz mozme vymazat *toOne asociacie
+        const assocToOneList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-one", "many-to-one"]).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        for (const assoc of assocToOneList) {
+            const assocRow: any = row[assoc.name];
+            // ak je v FK-stlpci null, potom je myslim asociacia null (este by mohla byt undefined (nepritomna))
+            if (assocRow) {
+                this.addRowOfEntityToRemove(this.xEntityMetadataService.getXEntity(assoc.entityName), assocRow, rowIdListToRemove, fileListToRemove);
+            }
+        }
+    }
+
+    async deleteRows(manager: EntityManager, entity: string, rowIdList: any[]) {
+        const repository = manager.getRepository(entity);
+        // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
+        await repository.delete(rowIdList);
+    }
+
+    removeFiles(fileListToRemove: Array<string>) {
+        for (const file of fileListToRemove) {
+            // ak sa nepodari vymazat subor, tak len zalogujeme
+            try {
+                unlinkSync(file);
+            }
+            catch (e) {
+                console.log(`Could not remove file ${file}. Error: ${e}`);
+            }
+            //console.log(`Succesfully removed file ${file}`);
+        }
+    }
+
+    /* old simple removeRow
+    async removeRowInTransactionOld(manager: EntityManager, row: RemoveRowParam): Promise<void> {
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
 
@@ -229,8 +350,9 @@ export class XLibService {
             const selectQueryBuilder: SelectQueryBuilder<VydajDobrovolnik> = repository.createQueryBuilder("vydajD");
             selectQueryBuilder.where("vydajD.idVydaj = :idVydaj", {idVydaj: row.id});
             await selectQueryBuilder.delete().execute();
-        */
+        /
     }
+    */
 
     /* old authetication
     async userAuthentication(userAuthenticationRequest: XUserAuthenticationRequest): Promise<XUserAuthenticationResponse> {

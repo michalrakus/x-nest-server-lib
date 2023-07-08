@@ -4,6 +4,8 @@ import {XLibService} from './x-lib.service';
 import {XLazyDataTableService} from './x-lazy-data-table.service';
 import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
+import {XFileController} from "./x-file.controller";
+import {XFileService} from "./x-file.service";
 
 @Module({})
 export class XLibModule {
@@ -13,12 +15,13 @@ export class XLibModule {
 
     return {
       imports: [],
-      controllers: [XLibController],
+      controllers: [XLibController, XFileController],
       providers: [
           XLibService,
           XLazyDataTableService,
           XEntityMetadataService,
-          XBrowseFormMetadataService
+          XBrowseFormMetadataService,
+          XFileService
       ],
         // servisy ktore su dostupne v inych moduloch
         exports: [

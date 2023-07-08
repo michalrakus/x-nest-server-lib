@@ -34,3 +34,16 @@ CREATE TABLE x_column_meta (
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE x_column_meta ADD CONSTRAINT x_column_meta_x_browse_meta FOREIGN KEY (id_x_browse_meta) REFERENCES x_browse_meta (id_x_browse_meta);
+
+-- MEDIUMBLOB has limit 16.78 MB
+-- LONGBLOB has limit 4 GB
+-- size is informative field
+-- file can be saved in file system (path + name is saved in field path_name, data is null) or can be saved direct in field data (path_name is null)
+CREATE TABLE x_file (
+    id int NOT NULL auto_increment,
+    name varchar(256) NOT NULL,
+    size INT NOT NULL,
+    path_name varchar(256),
+    data LONGBLOB,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;

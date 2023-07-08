@@ -1,4 +1,5 @@
 import {XEnvVar} from "./XEnvVars";
+import {join} from "path";
 
 export class XUtils {
 
@@ -32,5 +33,9 @@ export class XUtils {
             throw `Environment variable ${envVarName} - value not found. Check configuration file .env*`;
         }
         return value;
+    }
+
+    static getXFilesDir(): string {
+        return join('app-files', 'x-files');
     }
 }
