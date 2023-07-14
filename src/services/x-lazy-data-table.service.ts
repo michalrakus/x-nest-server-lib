@@ -6,21 +6,29 @@ import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
 import {ReadStream} from "fs";
 import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transformer/RawSqlResultsToEntityTransformer";
-import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
-import {CsvDecimalFormat, CsvParam, ExportParam, ExportType} from "../serverApi/ExportImportParam";
+import {XUtilsCommon} from "../serverApi/XUtilsCommon";
+import {
+    LazyDataTableQueryParam,
+    ExportType,
+    ExportParam
+} from "../serverApi/ExportImportParam";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
-import {XField} from "../serverApi/XEntityMetadata";
+import {XAssoc, XEntity, XField} from "../serverApi/XEntityMetadata";
 import {XMainQueryData} from "../x-query-data/XMainQueryData";
 import {XQueryData} from "../x-query-data/XQueryData";
 import {XSubQueryData} from "../x-query-data/XSubQueryData";
+import {XCsvWriter, XExportService} from "./x-export.service";
 
 @Injectable()
 export class XLazyDataTableService {
 
     constructor(
         private readonly dataSource: DataSource,
-        private readonly xEntityMetadataService: XEntityMetadataService
-    ) {}
+        private readonly xEntityMetadataService: XEntityMetadataService,
+        private readonly xExportService: XExportService
+    ) {
+        this.writeCsv = this.writeCsv.bind(this);
+    }
 
     async findRows(findParam : FindParam): Promise<FindResult> {
         //console.log("LazyDataTableService.findRows findParam = " + JSON.stringify(findParam));
@@ -162,52 +170,167 @@ export class XLazyDataTableService {
 
     async export(exportParam: ExportParam, res: Response) {
         if (exportParam.exportType === ExportType.Csv) {
-            await this.exportCsv(exportParam, res);
+            await this.xExportService.exportCsv(exportParam, res, this.writeCsv);
         }
         else if (exportParam.exportType === ExportType.Json) {
-            await this.exportJson(exportParam, res);
+            await this.exportJson(exportParam.queryParam, res);
         }
     }
 
-    private async exportCsv(exportParam: ExportParam, res: Response) {
+    writeCsv(queryParam: LazyDataTableQueryParam, xCsvWriter: XCsvWriter): Promise<void> {
 
-        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createSelectQueryBuilder(exportParam);
+        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(queryParam);
+        if (existsToManyAssoc) {
+            return this.writeCsvUsingList(queryParam, selectQueryBuilder, xCsvWriter);
+        } else {
+            return this.writeCsvUsingStream(queryParam, selectQueryBuilder, xCsvWriter);
+        }
+    }
+
+    async writeCsvUsingStream(queryParam: LazyDataTableQueryParam, selectQueryBuilder: SelectQueryBuilder<unknown>, xCsvWriter: XCsvWriter): Promise<void> {
+
         const readStream: ReadStream = await selectQueryBuilder.stream();
 
         // potrebujeme zoznam xField-ov, aby sme vedeli urcit typ fieldu
-        const xFieldList: XField[] = [];
-        const xEntity = this.xEntityMetadataService.getXEntity(exportParam.entity);
-        for (const field of exportParam.fields) {
-            xFieldList.push(this.xEntityMetadataService.getXFieldByPath(xEntity, field));
-        }
-
-        res.setHeader('Content-Type', 'text/csv; charset=UTF-8');
-        res.charset = "utf8"; // default encoding
-
-        if (exportParam.csvParam.useHeaderLine) {
-            const csvRow: string = this.createHeaderLine(exportParam.csvParam);
-            res.write(csvRow, "utf8");
-        }
+        const xFieldList: XField[] = this.createXFieldList(queryParam);
 
         readStream.on('data', data => {
             const entityObj = this.transformToEntity(data, selectQueryBuilder);
-            const rowStr: string = this.convertToCsv(entityObj, exportParam.fields, xFieldList, exportParam.csvParam);
-            res.write(rowStr, "utf8");
+            this.writeSimpleObjectRowToCsv(entityObj, queryParam.fields, xFieldList, xCsvWriter);
         });
 
         readStream.on('end', () => {
-            res.status(HttpStatus.OK);
-            res.end();
+            xCsvWriter.end();
         });
     }
 
-    private async exportJson(exportParam: ExportParam, res: Response) {
+    async writeCsvUsingList(queryParam: LazyDataTableQueryParam, selectQueryBuilder: SelectQueryBuilder<unknown>, xCsvWriter: XCsvWriter): Promise<void> {
 
-        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createSelectQueryBuilder(exportParam);
+        const rowList: any[] = await selectQueryBuilder.getMany();
+
+        const xEntity = this.xEntityMetadataService.getXEntity(queryParam.entity);
+
+        // potrebujeme zoznam xField-ov, aby sme vedeli urcit typ fieldu
+        const xFieldList: XField[] = this.createXFieldList(queryParam);
+
+        for (const row of rowList) {
+            this.writeObjectRowToCsv(row, queryParam.fields, xEntity, xFieldList, xCsvWriter);
+        }
+
+        xCsvWriter.end();
+    }
+
+    private writeSimpleObjectRowToCsv(entityObj: any, fields: string[], xFieldList: XField[], xCsvWriter: XCsvWriter) {
+        const csvValues: Array<any> = new Array<any>(fields.length);
+        for (const [index, field] of fields.entries()) {
+            let value: any = XUtilsCommon.getValueByPath(entityObj, field);
+            // skonvertujeme hodnotu, ak je to potrebne
+            [value] = this.convertValues([value], xFieldList[index], xCsvWriter);
+            csvValues[index] = value;
+        }
+        // a zapiseme riadok
+        xCsvWriter.writeRow(...csvValues);
+    }
+
+    private writeObjectRowToCsv(entityObj: any, fields: string[], xEntity: XEntity, xFieldList: XField[], xCsvWriter: XCsvWriter) {
+        // vytvarany csv row je tvoreny stlpcami - standardne ma stlpec presne 1 hodnotu,
+        // ak sa vsak jedna o field dotahovany cez one-to-many asociaciu, ma dany stlpec vsetky hodnoty dotiahnute cez danu asociaciu (moze byt aj 0 hodnot)
+        // dlzku najdlhsieho stlpca si zapiseme do "maxColumnIndex"
+        // (zatial) funguje len pre one-to-many asociacie ktore su na zaciatku "path" - TODO - poriest rekurzivne
+        const columnList: Array<any[]> = new Array<any[]>(fields.length);
+        let maxColumnLength: number = 1;
+        for (const [index, path] of fields.entries()) {
+            let columnValues: any[] = undefined;
+            // ak mame OneToMany asociaciu, musime nacitat zoznam hodnot
+            const [field, restPath]: [string, string | null] = XUtilsCommon.getFieldAndRestPath(path);
+            if (restPath !== null) {
+                const xAssoc: XAssoc = this.xEntityMetadataService.getXAssoc(xEntity, field);
+                if (xAssoc.relationType === "one-to-many") {
+                    const assocRowList: any[] = entityObj[xAssoc.name];
+                    if (!Array.isArray(assocRowList)) {
+                        throw `Unexpected error - row list not found on one-to-many assoc ${xAssoc.name}`;
+                    }
+                    columnValues = assocRowList.map<any>((row) => XUtilsCommon.getValueByPath(row, restPath));
+                    if (columnValues.length > maxColumnLength) {
+                        maxColumnLength = columnValues.length;
+                    }
+                }
+            }
+            if (columnValues === undefined) {
+                // nemame one-to-many asociaciu, jedna sa o standardny atribut
+                // zapiseme si pole o dlzky 1
+                columnValues = [XUtilsCommon.getValueByPath(entityObj, path)];
+            }
+            // skonvertujeme hodnoty, ak je to potrebne
+            columnValues = this.convertValues(columnValues, xFieldList[index], xCsvWriter);
+            // ulozime si stlpec do pola stlpcov
+            columnList[index] = columnValues;
+        }
+        // "matrix" mame hotovy, vytvorime csv riadky
+        for (let rowIndex: number = 0; rowIndex < maxColumnLength; rowIndex++) {
+            const csvValues: Array<any> = new Array<any>(fields.length);
+            for (const [index, columnValues] of columnList.entries()) {
+                let csvValue: any;
+                if (rowIndex < columnValues.length) {
+                    csvValue = columnValues[rowIndex];
+                }
+                else {
+                    csvValue = ""; // prazdna bunka
+                }
+                csvValues[index] = csvValue;
+            }
+            // a zapiseme riadok
+            xCsvWriter.writeRow(...csvValues);
+        }
+    }
+
+    private convertValues(values: any[], xField: XField, xCsvWriter: XCsvWriter): any[] {
+        // kedze niektore decimal hodnoty neprichadzaju ako number (typeof value nie je 'number' ale 'string') preto pouzijeme xField
+        // (je to pravdepodobne dosledok pouzitia nestandardej transformToEntity ale stalo sa to napr. aj v skch-finance v BudgetReportService
+        if (xField.type === "decimal") {
+            // skonvertujeme rovno na string
+            values = values.map<any>((value) => (value !== null && value !== undefined) ? xCsvWriter.number(value, xField.scale) : value);
+        }
+        return values;
+    }
+
+    private createXFieldList(queryParam: LazyDataTableQueryParam): XField[] {
+        const xFieldList: XField[] = [];
+        const xEntity = this.xEntityMetadataService.getXEntity(queryParam.entity);
+        for (const field of queryParam.fields) {
+            xFieldList.push(this.xEntityMetadataService.getXFieldByPath(xEntity, field));
+        }
+        return xFieldList;
+    }
+
+    private exportJson(queryParam: LazyDataTableQueryParam, res: Response): Promise<void> {
+
+        const headerCharset: string = "UTF-8";
+        res.setHeader(`Content-Type`, `application/json; charset=${headerCharset}`);
+        res.charset = headerCharset; // default encoding, pouziva sa pravdepodobne ak neni setnuty charset v 'Content-Type' (pozri riadok vyssie)
+
+        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(queryParam);
+        if (existsToManyAssoc) {
+            return this.exportJsonUsingList(selectQueryBuilder, res);
+        }
+        else {
+            return this.exportJsonUsingStream(selectQueryBuilder, res);
+        }
+    }
+
+    private async exportJsonUsingList(selectQueryBuilder: SelectQueryBuilder<unknown>, res: Response): Promise<void> {
+
+        const rowList: any[] = await selectQueryBuilder.getMany();
+
+        res.write(XUtilsCommon.objectAsJSON(rowList), "utf8");
+
+        res.status(HttpStatus.OK);
+        res.end();
+    }
+
+    private async exportJsonUsingStream(selectQueryBuilder: SelectQueryBuilder<unknown>, res: Response): Promise<void> {
+
         const readStream: ReadStream = await selectQueryBuilder.stream();
-
-        res.setHeader('Content-Type', 'application/json; charset=UTF-8');
-        res.charset = "utf8"; // default encoding
 
         res.write("[", "utf8");
 
@@ -234,12 +357,12 @@ export class XLazyDataTableService {
         });
     }
 
-    private createSelectQueryBuilder(exportParam: ExportParam): SelectQueryBuilder<unknown> {
+    private createSelectQueryBuilder(queryParam: LazyDataTableQueryParam): [SelectQueryBuilder<unknown>, boolean] {
 
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, exportParam.entity, "t", exportParam.filters, exportParam.customFilter);
-        xMainQueryData.addSelectItems(exportParam.fields);
-        xMainQueryData.addOrderByItems(exportParam.multiSortMeta);
-        return this.createQueryBuilderFromXMainQuery(xMainQueryData);
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, queryParam.entity, "t", queryParam.filters, queryParam.customFilter);
+        xMainQueryData.addSelectItems(queryParam.fields);
+        xMainQueryData.addOrderByItems(queryParam.multiSortMeta);
+        return [this.createQueryBuilderFromXMainQuery(xMainQueryData), xMainQueryData.assocXSubQueryDataMap.size > 0];
     }
 
     private transformToEntity(data: any, selectQueryBuilder: SelectQueryBuilder<unknown>): any {
@@ -249,7 +372,45 @@ export class XLazyDataTableService {
         return entityList[0];
     }
 
-    private convertToCsv(entityObj: any, fields: string[], xFieldList: XField[], csvParam: CsvParam): string {
+    // ************** stary nepouzivany export ******************
+/*
+    private async exportCsv(exportParam: ExportParam, res: Response) {
+
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createSelectQueryBuilder(exportParam.queryParam);
+        const readStream: ReadStream = await selectQueryBuilder.stream();
+
+        // potrebujeme zoznam xField-ov, aby sme vedeli urcit typ fieldu
+        const xFieldList: XField[] = [];
+        const xEntity = this.xEntityMetadataService.getXEntity(exportParam.queryParam.entity);
+        for (const field of exportParam.queryParam.fields) {
+            xFieldList.push(this.xEntityMetadataService.getXFieldByPath(xEntity, field));
+        }
+
+        const headerCharset: string = XExportService.getHeaderCharset(exportParam.csvParam.csvEncoding); // napr. UTF-8, windows-1250
+        const iconvCharset: CsvEncoding = exportParam.csvParam.csvEncoding; // napr. utf-8, win1250
+
+        res.setHeader("Content-Type", `text/csv; charset=${headerCharset}`);
+        res.charset = headerCharset; // default encoding - pravdepodobne setne tuto hodnotu do charset=<res.charset> v header-i "Content-Type"
+        // ak neni atribut charset definovany explicitne - TODO - odskusat
+
+        if (exportParam.csvParam.useHeaderLine) {
+            const csvRow: string = this.createHeaderLineOld(exportParam.csvParam);
+            res.write(iconv.encode(csvRow, iconvCharset)); // neviem ci toto je idealny sposob ako pouzivat iconv, ale funguje...
+        }
+
+        readStream.on('data', data => {
+            const entityObj = this.transformToEntity(data, selectQueryBuilder);
+            const rowStr: string = this.convertToCsvOld(entityObj, exportParam.queryParam.fields, xFieldList, exportParam.csvParam);
+            res.write(iconv.encode(rowStr, iconvCharset));
+        });
+
+        readStream.on('end', () => {
+            res.status(HttpStatus.OK);
+            res.end();
+        });
+    }
+
+    private convertToCsvOld(entityObj: any, fields: string[], xFieldList: XField[], csvParam: CsvParam): string {
         let csvRow: string = "";
         for (const [index, field] of fields.entries()) {
             const xField = xFieldList[index];
@@ -287,7 +448,7 @@ export class XLazyDataTableService {
             else {
                 valueStr = "";
             }
-            valueStr = this.processCsvItem(valueStr, csvParam.csvSeparator);
+            valueStr = this.processCsvItemOld(valueStr, csvParam.csvSeparator);
             if (csvRow.length > 0) {
                 csvRow += csvParam.csvSeparator;
             }
@@ -297,10 +458,10 @@ export class XLazyDataTableService {
         return csvRow;
     }
 
-    private createHeaderLine(csvParam: CsvParam): string {
+    private createHeaderLineOld(csvParam: CsvParam): string {
         let csvRow: string = "";
         for (const header of csvParam.headers) {
-            const valueStr = this.processCsvItem(header, csvParam.csvSeparator);
+            const valueStr = this.processCsvItemOld(header, csvParam.csvSeparator);
             if (csvRow.length > 0) {
                 csvRow += csvParam.csvSeparator;
             }
@@ -310,12 +471,19 @@ export class XLazyDataTableService {
         return csvRow;
     }
 
-    private processCsvItem(valueStr: string, csvSeparator: string): string {
-        valueStr = valueStr.replace(/"/g, '""'); // ekvivalent pre regexp /"/g je: new RegExp('"', 'g')
-        // aj tu pouzivam XUtils.csvSeparator
-        if (valueStr.search(new RegExp(`("|${csvSeparator}|\n)`, 'g')) >= 0) {
-            valueStr = '"' + valueStr + '"'
+    private processCsvItemOld(valueStr: string, csvSeparator: string): string {
+        // moj stary Excel 2010 nechcel nacitavat subor ktory obsahoval v bunke retazec ID
+        if (valueStr === "ID") {
+            valueStr = '"' + valueStr + '"';
+        }
+        else {
+            valueStr = valueStr.replace(/"/g, '""'); // ekvivalent pre regexp /"/g je: new RegExp('"', 'g')
+            // aj tu pouzivam XUtils.csvSeparator
+            if (valueStr.search(new RegExp(`("|${csvSeparator}|\n)`, 'g')) >= 0) {
+                valueStr = '"' + valueStr + '"';
+            }
         }
         return valueStr;
     }
+ */
 }

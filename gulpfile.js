@@ -24,6 +24,7 @@ function generateApi(cb) {
         //"./lib/auth/jwt-auth.guard.ts",
         //"./lib/services/x-entity-metadata.service",
         "./lib/services/x-exception.filter",
+        "./lib/services/x-export.service",
         //"./lib/services/x-lazy-data-table.service",
         "./lib/services/x-lib.service",
         //"./lib/services/x-lib.controller",
@@ -31,7 +32,8 @@ function generateApi(cb) {
         "./lib/services/XAdvancedConsoleLogger",
         "./lib/services/XEnvVars",
         "./lib/services/XOptimisticLockingSubscriber",
-        "./lib/services/XUtils"
+        "./lib/services/XUtils",
+        "./lib/services/XUtilsConversions"
     ];
 
     for (const apiFile of apiFileList) {

@@ -19,7 +19,7 @@ import {RemoveRowParam} from "./RemoveRowParam";
 import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 import {Response} from 'express';
-import {ExportParam} from "../serverApi/ExportImportParam";
+import {ExportParam, LazyDataTableQueryParam} from "../serverApi/ExportImportParam";
 import {FindParamRows} from "./FindParamRows";
 import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
 
@@ -37,7 +37,7 @@ export class XLibController {
         return findResult;
     }
 
-    @Post('lazyDataTableExport')
+    @Post('x-lazy-data-table-export')
     async lazyDataTableExport(@Body() body: ExportParam, @Res() res: Response) {
         // toto je pouzitie express-u (nizsia vrstva ako nestjs) - Response je z express-u
         // viac na https://docs.nestjs.com/controllers#getting-up-and-running

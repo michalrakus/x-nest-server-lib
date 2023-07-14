@@ -25,6 +25,9 @@ dependencies:
   dateformat:
     specifier: ^4.6.3
     version: 4.6.3
+  iconv-lite:
+    specifier: ^0.6.3
+    version: 0.6.3
   jwks-rsa:
     specifier: ^3.0.1
     version: 3.0.1
