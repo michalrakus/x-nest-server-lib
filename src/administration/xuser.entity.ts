@@ -19,7 +19,7 @@ export class XUser {
     enabled: boolean;
 
     @Column({name: 'modif_date', type: 'datetime', nullable: true})
-    modifDate?: Date;
+    modifDate: Date;
 
     @ManyToOne(() => XUser, {nullable: true})
     @JoinColumn({ name: 'modif_x_user_id' })

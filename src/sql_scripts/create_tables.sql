@@ -45,5 +45,9 @@ CREATE TABLE x_file (
     size INT NOT NULL,
     path_name varchar(256),
     data LONGBLOB,
+    modif_date DATETIME,
+    modif_x_user_id int,
     PRIMARY KEY (id)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
+
+ALTER TABLE x_file ADD CONSTRAINT x_file_x_user FOREIGN KEY (modif_x_user_id) REFERENCES x_user (id_x_user);

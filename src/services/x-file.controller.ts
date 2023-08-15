@@ -6,6 +6,7 @@ import {XUtils} from "./XUtils";
 import {XFile} from "../administration/x-file.entity";
 import {FileInterceptor} from "@nestjs/platform-express";
 import {join} from "path";
+import {XFileJsonField} from "../serverApi/XFileJsonField";
 
 @Controller()
 export class XFileController {
@@ -19,13 +20,21 @@ export class XFileController {
     async uploadFileIntoFileSystem(@Body() body: any, @UploadedFile() file: Express.Multer.File/*, @Res() res: Response*/): Promise<XFile> {
 
         // body.jsonField je string, treba ho explicitne konvertovat na objekt, ani ked specifikujem typ pre "body" tak nefunguje
-        const jsonField: {filename: string; subdir?: string;} = JSON.parse(body.jsonField);
+        const jsonField: XFileJsonField = JSON.parse(body.jsonField);
 
         // insertneme zaznam XFile a vratime ho
         // file.originalname ma zlu diakritiku, preto vezmeme filename z json-u
         // pathName vytvarame z id-cka, preto ho doplnime neskor - TODO - ziskat nove id-cko a spustit len insert
         const filename: string = jsonField.filename;
-        const xFile: XFile = await this.xFileService.saveXFile({id: undefined, name: filename, size: file.size, pathName: null, data: null});
+        const xFile: XFile = await this.xFileService.saveXFile({
+            id: undefined,
+            name: filename,
+            size: file.size,
+            pathName: null,
+            data: null,
+            modifDate: jsonField.modifDate,
+            modifXUser: jsonField.modifXUser
+        });
 
         // subor ulozime do adresara app-files/x-files/<jsonField.filepath>
         let destPath: string = XUtils.getXFilesDir();
@@ -67,11 +76,19 @@ export class XFileController {
     uploadFileIntoDb(@Body() body: any, @UploadedFile() file: Express.Multer.File/*, @Res() res: Response*/): Promise<XFile> {
 
         // body.jsonField je string, treba ho explicitne konvertovat na objekt, ani ked specifikujem typ pre "body" tak nefunguje
-        const jsonField: {filename: string; subdir?: string;} = JSON.parse(body.jsonField);
+        const jsonField: XFileJsonField = JSON.parse(body.jsonField);
 
         // insertneme zaznam XFile a vratime ho
         // file.originalname ma zlu diakritiku, preto vezmeme filename z json fieldu
-        return this.xFileService.saveXFile({id: undefined, name: jsonField.filename, size: file.buffer.byteLength, pathName: null, data: file.buffer});
+        return this.xFileService.saveXFile({
+            id: undefined,
+            name: jsonField.filename,
+            size: file.buffer.byteLength,
+            pathName: null,
+            data: file.buffer,
+            modifDate: jsonField.modifDate,
+            modifXUser: jsonField.modifXUser
+        });
     }
 
     @Post('x-download-file')

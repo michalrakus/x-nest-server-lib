@@ -19,4 +19,11 @@ export class XFile {
     // select: false - nechceme selectovat stlpec lebo obsahuje vela dat
     @Column({type: "longblob", nullable: true, select: false, })
     data: Buffer;
+
+    @Column({name: 'modif_date', type: 'datetime', nullable: true})
+    modifDate: Date;
+
+    // tuto len jednoduchy number atribut, lebo namiesto XUser triedy pouzivame v aplikacii specificku napr. XUserSkch a nefunguje start backendu koli tomu
+    @Column({name: 'modif_x_user_id', nullable: true})
+    modifXUser: number;
 }
