@@ -8,7 +8,7 @@ export interface XBrowseMetaMap {
 /*
 // zodpoveda priblizne props na XLazyDataTable
 export interface XBrowseMeta {
-    idXBrowseMeta?: number; // hodnota undefined (?) sa pouziva pri inserte do DB
+    id?: number; // hodnota undefined (?) sa pouziva pri inserte do DB
     entity: string;
     browseId?: string;
     rows?: number;
@@ -17,7 +17,7 @@ export interface XBrowseMeta {
 
 // zodpoveda typu XLazyColumnProps
 export interface XColumnMeta {
-    idXColumnMeta?: number; // hodnota undefined (?) sa pouziva pri inserte do DB
+    id?: number; // hodnota undefined (?) sa pouziva pri inserte do DB
     field: string;
     header?: any;
     align?: "left" | "center" | "right";

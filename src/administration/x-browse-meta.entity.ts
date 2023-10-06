@@ -4,8 +4,8 @@ import {XColumnMeta} from "./x-column-meta.entity";
 @Entity('x_browse_meta')
 export class XBrowseMeta {
 
-    @PrimaryGeneratedColumn({name: 'id_x_browse_meta'})
-    idXBrowseMeta: number;
+    @PrimaryGeneratedColumn()
+    id: number;
 
     @Column({length: 64, nullable: false})
     entity: string;

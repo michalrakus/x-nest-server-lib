@@ -4,8 +4,8 @@ import {XBrowseMeta} from "./x-browse-meta.entity";
 @Entity('x_column_meta')
 export class XColumnMeta {
 
-    @PrimaryGeneratedColumn({name: 'id_x_column_meta'})
-    idXColumnMeta: number;
+    @PrimaryGeneratedColumn()
+    id: number;
 
     @Column({length: 64, nullable: false})
     field: string;
@@ -27,6 +27,6 @@ export class XColumnMeta {
     columnOrder: number;
 
     @ManyToOne(type => XBrowseMeta, browseMeta => browseMeta.columnMetaList, {nullable: false})
-    @JoinColumn({name: "id_x_browse_meta"})
+    @JoinColumn({name: "x_browse_meta_id"})
     browseMeta: XBrowseMeta;
 }

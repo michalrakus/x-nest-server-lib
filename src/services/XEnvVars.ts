@@ -4,6 +4,8 @@ export enum XEnvVar {
     X_AUTH = 'X_AUTH',
     X_AUTH0_DOMAIN = 'X_AUTH0_DOMAIN',
     X_AUTH0_AUDIENCE = 'X_AUTH0_AUDIENCE',
+    X_MS_ENTRA_ID_TENANT_ID = 'X_MS_ENTRA_ID_TENANT_ID',
+    X_MS_ENTRA_ID_AUDIENCE = 'X_MS_ENTRA_ID_AUDIENCE',
     X_DATABASE_URL = 'X_DATABASE_URL',
     X_LOG_SQL = 'X_LOG_SQL'
 }
@@ -12,5 +14,5 @@ export enum XEnvVar {
 export enum XAuth {
     LOCAL = 'LOCAL',
     AUTH0 = 'AUTH0',
-    AAD = 'AAD'
+    MS_ENTRA_ID = 'MS_ENTRA_ID'
 }

@@ -16,11 +16,15 @@ export class XFile {
     @Column({name: 'path_name', length: 256, nullable: true})
     pathName: string;
 
+    // for mysql use type: 'longblob'
+    // for postgres use type: 'bytea'
     // select: false - nechceme selectovat stlpec lebo obsahuje vela dat
-    @Column({type: "longblob", nullable: true, select: false, })
+    @Column({type: 'bytea', nullable: true, select: false})
     data: Buffer;
 
-    @Column({name: 'modif_date', type: 'datetime', nullable: true})
+    // for mysql use type: 'datetime'
+    // for postgres use type: 'timestamp'
+    @Column({name: 'modif_date', type: 'timestamp', nullable: true})
     modifDate: Date;
 
     // tuto len jednoduchy number atribut, lebo namiesto XUser triedy pouzivame v aplikacii specificku napr. XUserSkch a nefunguje start backendu koli tomu

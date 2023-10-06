@@ -1,39 +1,45 @@
+-- DROP TABLE x_file;
+-- DROP TABLE x_column_meta;
+-- DROP TABLE x_browse_meta;
+-- DROP TABLE x_user;
+
 CREATE TABLE x_user (
-	id_x_user int NOT NULL auto_increment,
+	id int NOT NULL auto_increment,
 	username varchar(64) NOT NULL,
 	password CHAR(60), -- not used if auth2 used
     name varchar(128) NOT NULL, -- family name + surname
     enabled tinyint(1) NOT NULL default 1,
+    admin tinyint(1) NOT NULL default 0,
     modif_date DATETIME,
     modif_x_user_id int,
     version INT NOT NULL,
-	PRIMARY KEY (id_x_user)
+	PRIMARY KEY (id)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE x_user ADD CONSTRAINT uq_x_user_username UNIQUE KEY(username);
-ALTER TABLE x_user ADD CONSTRAINT x_user_x_user FOREIGN KEY (modif_x_user_id) REFERENCES x_user (id_x_user);
+ALTER TABLE x_user ADD CONSTRAINT x_user_x_user FOREIGN KEY (modif_x_user_id) REFERENCES x_user (id);
 
 CREATE TABLE x_browse_meta (
-	id_x_browse_meta int NOT NULL auto_increment,
+	id int NOT NULL auto_increment,
     entity varchar(64) NOT NULL,
     browse_id varchar(64),
     `rows` int(6),
-	PRIMARY KEY (id_x_browse_meta)
+	PRIMARY KEY (id)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE x_column_meta (
-	id_x_column_meta int NOT NULL auto_increment,
+	id int NOT NULL auto_increment,
     field varchar(64) NOT NULL,
     header varchar(64),
     align enum('left','center','right'),
     dropdown_in_filter tinyint(1) NOT NULL default 0,
     width varchar(16),
     column_order int(3) NOT NULL,
-	id_x_browse_meta int NOT NULL,
-	PRIMARY KEY (id_x_column_meta)
+	x_browse_meta_id int NOT NULL,
+	PRIMARY KEY (id)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE x_column_meta ADD CONSTRAINT x_column_meta_x_browse_meta FOREIGN KEY (id_x_browse_meta) REFERENCES x_browse_meta (id_x_browse_meta);
+ALTER TABLE x_column_meta ADD CONSTRAINT x_column_meta_x_browse_meta FOREIGN KEY (x_browse_meta_id) REFERENCES x_browse_meta (id);
 
 -- MEDIUMBLOB has limit 16.78 MB
 -- LONGBLOB has limit 4 GB
@@ -50,4 +56,4 @@ CREATE TABLE x_file (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB  DEFAULT CHARSET=utf8mb4;
 
-ALTER TABLE x_file ADD CONSTRAINT x_file_x_user FOREIGN KEY (modif_x_user_id) REFERENCES x_user (id_x_user);
+ALTER TABLE x_file ADD CONSTRAINT x_file_x_user FOREIGN KEY (modif_x_user_id) REFERENCES x_user (id);

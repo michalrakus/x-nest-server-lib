@@ -48,6 +48,10 @@ export class XEntityMetadataService {
                 if (type === "int") {
                     type = "number";
                 }
+                // postgres nepouziva datetime ale timestamp, ale na klientovi riesime datetime stlpce pomocou typu datetime
+                if (type === "timestamp") {
+                    type = "datetime";
+                }
             }
             else if (typeof columnMetadata.type === "function") {
                 // ak nezapiseme do dekoratora @Column atribut type, zbieha tato vetva a ziskame typ atributu (string, number, ...) (plati napr. pre id-cka)

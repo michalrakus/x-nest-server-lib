@@ -15,7 +15,7 @@ export class XBrowseFormMetadataService {
         const repository = this.dataSource.getRepository(XBrowseMeta);
         const selectQueryBuilder: SelectQueryBuilder<XBrowseMeta> = repository.createQueryBuilder("xBrowseMeta");
         selectQueryBuilder.leftJoinAndSelect("xBrowseMeta.columnMetaList", "xColumnMeta");
-        selectQueryBuilder.orderBy({"xBrowseMeta.idXBrowseMeta": "ASC", "xColumnMeta.columnOrder": "ASC"});
+        selectQueryBuilder.orderBy({"xBrowseMeta.id": "ASC", "xColumnMeta.columnOrder": "ASC"});
         const xBrowseMetaList: XBrowseMeta[] = await selectQueryBuilder.getMany();
 
         const xBrowseMetaMap: XBrowseMetaMap = {};

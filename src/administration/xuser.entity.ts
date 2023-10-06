@@ -3,8 +3,8 @@ import {Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, VersionCo
 @Entity('x_user')
 export class XUser {
 
-    @PrimaryGeneratedColumn({name: 'id_x_user'})
-    idXUser: number;
+    @PrimaryGeneratedColumn()
+    id: number;
 
     @Column({length: 64, nullable: false})
     username: string;
@@ -18,7 +18,12 @@ export class XUser {
     @Column({nullable: false})
     enabled: boolean;
 
-    @Column({name: 'modif_date', type: 'datetime', nullable: true})
+    @Column({nullable: false})
+    admin: boolean;
+
+    // for mysql use type: 'datetime'
+    // for postgres use type: 'timestamp'
+    @Column({name: 'modif_date', type: 'timestamp', nullable: true})
     modifDate: Date;
 
     @ManyToOne(() => XUser, {nullable: true})

@@ -390,7 +390,10 @@ export class XLibService {
         // if (row.object.password && row.object.password !== '') {
         //     row.object.password = await this.hashPassword(row.object.password);
         // }
-        await repository.save(row.object);
+
+        // projekt depaul potrebuje pracovat s detail zaznamami, preto volame this.saveRow
+        //await repository.save(row.object);
+        await this.saveRow(row);
     }
 
     /* old authentication

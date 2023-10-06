@@ -1,7 +1,8 @@
 export interface XUser {
-    idXUser: number;
+    id: number;
     username: string;
     password: string;
     name: string;
     enabled: boolean;
+    admin: boolean;
 }
