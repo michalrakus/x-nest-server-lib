@@ -3,7 +3,7 @@ import {XEntityMetadataService} from "../services/x-entity-metadata.service";
 import {OrderByCondition} from "typeorm";
 import {XSubQueryData} from "./XSubQueryData";
 import {DataTableFilterMeta, DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
-import {XCustomFilter} from "../serverApi/FindParam";
+import {XCustomFilterItem} from "../serverApi/FindParam";
 import {XAssoc, XEntity} from "../serverApi/XEntityMetadata";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 
@@ -18,7 +18,7 @@ export class XMainQueryData extends XQueryData {
     selectItems: string[]; // not used now
     orderByItems: OrderByCondition;
 
-    constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string, filters: DataTableFilterMeta | undefined, customFilter: XCustomFilter | undefined) {
+    constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string, filters: DataTableFilterMeta | undefined, customFilterItems: XCustomFilterItem[] | undefined) {
         super(rootAlias);
         this.xEntityMetadataService = xEntityMetadataService;
         this.xEntity = this.xEntityMetadataService.getXEntity(entity);
@@ -27,9 +27,9 @@ export class XMainQueryData extends XQueryData {
         this.orderByItems = {};
 
         //console.log("filters = " + JSON.stringify(filters));
-        //console.log("customFilter = " + JSON.stringify(customFilter));
+        //console.log("customFilterItems = " + JSON.stringify(customFilterItems));
         this.addFilters(filters);
-        this.addCustomFilter(customFilter);
+        this.addCustomFilterItems(customFilterItems);
     }
 
     isMainQueryData(): boolean {
@@ -48,19 +48,14 @@ export class XMainQueryData extends XQueryData {
         }
     }
 
-    addCustomFilter(customFilter: XCustomFilter | undefined) {
-        if (customFilter) {
+    addCustomFilterItems(customFilterItems: XCustomFilterItem[] | undefined) {
+        if (customFilterItems) {
             // kedze fieldy v custom filtri mozu patrit do rozlicnych queries (mozu byt pouzite OneToMany asociacie),
             // mame tu specialnu podporu pre custom filtre zlozene z viacerych items
             // musi byt splnena podmienka, ze vsetky fieldy v danom item patria do jednej query
             // (vsetky fieldy su z main query (ziadna OneToMany asociacia) alebo vsetky fieldy pouzivaju tu istu OneToMany asociaciu)
-            if (Array.isArray(customFilter)) {
-                for (const customFilterItem of customFilter) {
-                    this.addCustomFilterItem(customFilterItem);
-                }
-            } else {
-                // standardny sposob, nemame pole itemov, mame priamo jedinu item typu XCustomFilter
-                this.addCustomFilterItem(customFilter);
+            for (const customFilterItem of customFilterItems) {
+                this.addCustomFilterItem(customFilterItem);
             }
         }
     }
@@ -97,28 +92,28 @@ export class XMainQueryData extends XQueryData {
         }
     }
 
-    private addCustomFilterItem(customFilter: XCustomFilter) {
-        // example of customFilter.filter: ([assocField1.field2] BETWEEN :value1 AND :value2) AND ([field3] IN (:...values3))
+    private addCustomFilterItem(xCustomFilterItem: XCustomFilterItem) {
+        // example of xCustomFilterItem.filter: ([assocField1.field2] BETWEEN :value1 AND :value2) AND ([field3] IN (:...values3))
         // fields in [] will be replaced with <table alias>.<column>
-        let filter: string = customFilter.filter;
+        let where: string = xCustomFilterItem.where;
         let match: string;
         let xQueryDataForItem: XQueryData | null = null;
-        while ((match = XUtilsCommon.findFirstMatch(/\[[a-zA-Z0-9_.]+\]/, filter)) != null) {
+        while ((match = XUtilsCommon.findFirstMatch(/\[[a-zA-Z0-9_.]+\]/, where)) != null) {
             const filterField: string = match.substring(1, match.length - 1); // remove []
             const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(filterField);
             if (xQueryDataForItem === null) {
                 xQueryDataForItem = xQueryData;
             } else if (xQueryData !== xQueryDataForItem) {
-                throw `Custom filter (or custom filter item) "${customFilter.filter}" must use the same query for all fields (all fields must use the same OneToMany assoc or OneToMany assoc cannot be used). Please divide your custom filter into more custom filters in form of array [filter1, filter2, ...].`;
+                throw `Custom filter (or custom filter item) "${xCustomFilterItem.where}" must use the same query for all fields (all fields must use the same OneToMany assoc or OneToMany assoc cannot be used). Please divide your custom filter into more custom filters in form of array [filter1, filter2, ...].`;
             }
             const dbField: string = xQueryDataForItem.getFieldFromPathField(filterFieldNew);
-            filter = filter.replaceAll(match, dbField);
+            where = where.replaceAll(match, dbField);
         }
         if (xQueryDataForItem === null) {
-            throw `Custom filter (or custom filter item) "${customFilter.filter}" - no field was found. Example of custom filter: [fieldX] = :valueX`;
+            throw `Custom filter (or custom filter item) "${xCustomFilterItem.where}" - no field was found. Example of custom filter: [fieldX] = :valueX`;
         }
-        xQueryDataForItem.addWhereItem(filter);
-        xQueryDataForItem.addParams(customFilter.values);
+        xQueryDataForItem.addWhereItem(where);
+        xQueryDataForItem.addParams(xCustomFilterItem.params);
     }
 
     getQueryForPathField(pathField: string): [XQueryData, string] {

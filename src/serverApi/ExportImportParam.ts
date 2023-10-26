@@ -1,7 +1,7 @@
 // ExportType a LazyDataTableQueryParam sa pouzivaju v samostatnom servise ktory data streamuje
 // (na rozdiel od ResultType.AllRows ktory by sa ani nemal pouzivat - nemali by sa vsetky rows tahat na klienta v jednom velkom requeste)
 import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
-import {XCustomFilter} from "./FindParam";
+import {XCustomFilterItem} from "./FindParam";
 
 export enum ExportType {
     Csv = "csv",
@@ -16,7 +16,7 @@ export interface ExportParam {
 
 export interface LazyDataTableQueryParam {
     filters: DataTableFilterMeta;
-    customFilter?: XCustomFilter;
+    customFilterItems?: XCustomFilterItem[];
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields: string[];

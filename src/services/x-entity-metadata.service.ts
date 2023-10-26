@@ -45,11 +45,14 @@ export class XEntityMetadataService {
             if (typeof columnMetadata.type === "string") {
                 type = columnMetadata.type;
                 // nech nemame na klientovi milion vseliakych databazovych typov, tak si prehodime niektore typy na javascript-ove, t.j. napr. string, number
-                if (type === "int") {
+                if (type === "character varying") {
+                    type = "string";
+                }
+                else if (type === "int" || type === "integer") {
                     type = "number";
                 }
                 // postgres nepouziva datetime ale timestamp, ale na klientovi riesime datetime stlpce pomocou typu datetime
-                if (type === "timestamp") {
+                else if (type === "timestamp" || type === "timestamp without time zone") {
                     type = "datetime";
                 }
             }

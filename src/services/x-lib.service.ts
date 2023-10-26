@@ -53,7 +53,7 @@ export class XLibService {
     // toto je specialny pripad vseobecnejsieho servisu XLazyDataTableService.findRows, ak resultType === ResultType.AllRows
     // (nedava napr. moznost dotahovat aj asociovane objekty, sortovat podla viacerych stlpcov a pod. - je to take zjednodusene)
     /**
-     * @deprecated - mal by sa pouzivat lazy findRows + customFilter
+     * @deprecated - mal by sa pouzivat lazy findRows + customFilterItems
      */
     async findRows(findParamRows: FindParamRows): Promise<any[]> {
         const repository = this.dataSource.getRepository(findParamRows.entity);

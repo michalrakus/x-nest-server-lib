@@ -23,14 +23,17 @@ export enum ResultType {
     AllRows
 }
 
-export interface XCustomFilterValues {
+export interface XParams {
     [key: string]: any;
 }
 
-export interface XCustomFilter {
-    filter: string;
-    values: XCustomFilterValues;
+export interface XCustomFilterItem {
+    where: string;
+    params: XParams;
 }
+
+// XCustomFilter sa pouziva len na frontend-e, na backend chodi vzdy pole XCustomFilterItem[], nech je to rovnake ako ine atributy
+export type XCustomFilter = XCustomFilterItem | XCustomFilterItem[];
 
 export enum XAggregateType {
     Min = "MIN",
@@ -49,7 +52,7 @@ export interface FindParam {
     first?: number;
     rows?: number; // page size
     filters?: DataTableFilterMeta;
-    customFilter?: XCustomFilter;
+    customFilterItems?: XCustomFilterItem[];
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields?: string[];

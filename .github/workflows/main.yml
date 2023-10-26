@@ -1,7 +1,8 @@
 # Workflow Build and publish (build is triggered in prepublish)
 name: Build and publish
 
-on: [push]
+# temporary turn off in order to commit stuff
+#on: [push]
 jobs:
   build-and-publish:
     name: Build and publish

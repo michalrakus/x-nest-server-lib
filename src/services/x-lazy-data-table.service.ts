@@ -35,7 +35,7 @@ export class XLazyDataTableService {
 
         // TODO - optimalizacia - leftJoin-y sa mozu nahradit za join-y, ak je ManyToOne asociacia not null (join-y su rychlejsie ako leftJoin-y)
 
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", findParam.filters, findParam.customFilter);
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", findParam.filters, findParam.customFilterItems);
 
         let rowCount: number;
         const aggregateValues: XAggregateValues = {};
@@ -359,7 +359,7 @@ export class XLazyDataTableService {
 
     private createSelectQueryBuilder(queryParam: LazyDataTableQueryParam): [SelectQueryBuilder<unknown>, boolean] {
 
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, queryParam.entity, "t", queryParam.filters, queryParam.customFilter);
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, queryParam.entity, "t", queryParam.filters, queryParam.customFilterItems);
         xMainQueryData.addSelectItems(queryParam.fields);
         xMainQueryData.addOrderByItems(queryParam.multiSortMeta);
         return [this.createQueryBuilderFromXMainQuery(xMainQueryData), xMainQueryData.assocXSubQueryDataMap.size > 0];
