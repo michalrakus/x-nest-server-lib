@@ -200,17 +200,20 @@ export class XLibService {
         // navyse tu mame aj mazanie suborov, ak strom objektov obsahuje zaznam XFile
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
-        return this.removeRowsInTransaction(manager, xEntity, [row.id], fileListToRemove);
+        return this.removeRowsInTransaction(manager, xEntity, [row.id], fileListToRemove, row.assocsToRemove);
     }
 
-    async removeRowsInTransaction(manager: EntityManager, xEntity: XEntity, rowIdList: any[], fileListToRemove?: Array<string>) {
+    async removeRowsInTransaction(manager: EntityManager, xEntity: XEntity, rowIdList: any[], fileListToRemove?: Array<string>, assocsToRemove?: string[]) {
         // vygenerujeme query - jednym selectom nacitame cely strom zaznamov ktory ideme vymazat
         // prejdeme rekurzivne cez vsetky asociacie ktore maju nastaveny cascade "remove"
         const alias: string = "t";
         const repository = manager.getRepository(xEntity.name);
         const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder(alias);
         // volanie this.addAssocsOfEntity pridava left join-y do selectQueryBuilder
-        if (this.addAssocsOfEntity(selectQueryBuilder, xEntity, alias)) {
+        // assocsToRemove je implementovane zjednodusene, len pre prvu uroven
+        // ak to ma fungovat pre cely path napr. "assoc1.assoc2", tak treba vytvarat mapu assocAliasMap (podobne ako pri lazy tabulke)
+        // a zaroven pustat pridavanie asociacii cez cascade remove pre kazdy alias (vcetne hlavneho), zbieranie id-ciek treba vykonat tiez podobne
+        if (this.addAssocsOfEntity(selectQueryBuilder, xEntity, alias, assocsToRemove)) {
             // ak sme pridali aspon 1 leftJoin
             selectQueryBuilder.whereInIds(rowIdList);
 
@@ -218,7 +221,7 @@ export class XLibService {
             const rowList: any[] = await selectQueryBuilder.getMany();
             const rowIdListToRemove: XRowIdListToRemove = new XRowIdListToRemove();
             for (const row of rowList) {
-                this.addRowOfEntityToRemove(xEntity, row, rowIdListToRemove, fileListToRemove);
+                this.addRowOfEntityToRemove(xEntity, row, rowIdListToRemove, fileListToRemove, assocsToRemove);
             }
 
             // vymazeme nazbierane id-cka
@@ -233,30 +236,30 @@ export class XLibService {
         }
     }
 
-    addAssocsOfEntity(selectQueryBuilder: SelectQueryBuilder<unknown>, xEntity: XEntity, alias: string): boolean {
+    addAssocsOfEntity(selectQueryBuilder: SelectQueryBuilder<unknown>, xEntity: XEntity, alias: string, assocsToRemove?: string[]): boolean {
         // prejdeme vsetky asociacie (ktore maju cascade "remove", aj *toMany aj *toOne) a pridame ich do query
         let leftJoinAdded: boolean = false;
-        const assocList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        const assocList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity).filter((assoc: XAssoc) => this.filterForAssocToRemove(assoc, assocsToRemove));
         for (const [index, assoc] of assocList.entries()) {
             const aliasForAssoc: string = `${alias}_${index}`; // chceme mat unique alias v ramci celeho stromu, tak vytvarame nieco ako napr. t_2_0_1
             selectQueryBuilder.leftJoinAndSelect(`${alias}.${assoc.name}`, aliasForAssoc);
             leftJoinAdded = true;
             const xAssocEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
-            this.addAssocsOfEntity(selectQueryBuilder, xAssocEntity, `${alias}_${index}`);
+            this.addAssocsOfEntity(selectQueryBuilder, xAssocEntity, aliasForAssoc, undefined); // zatial zimplementovane len pre prvu uroven
         }
         return leftJoinAdded;
     }
 
-    addRowOfEntityToRemove(xEntity: XEntity, row: any, rowIdListToRemove: XRowIdListToRemove, fileListToRemove?: Array<string>) {
+    addRowOfEntityToRemove(xEntity: XEntity, row: any, rowIdListToRemove: XRowIdListToRemove, fileListToRemove?: Array<string>, assocsToRemove?: string[]) {
         // vymazeme "row" aj s jeho asociovanymi objektmi
         // musime mazat v spravnom poradi aby sme nenarusili FK constrainty (a ak asociacie vytvaraju cyklus, tak nam ani spravne poradie nepomoze...)
 
         // najprv *toMany asociacie
-        const assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        const assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]).filter((assoc: XAssoc) => this.filterForAssocToRemove(assoc, assocsToRemove));
         for (const assoc of assocToManyList) {
             const assocRowList: any[] = row[assoc.name];
             for (const assocRow of assocRowList) {
-                this.addRowOfEntityToRemove(this.xEntityMetadataService.getXEntity(assoc.entityName), assocRow, rowIdListToRemove, fileListToRemove);
+                this.addRowOfEntityToRemove(this.xEntityMetadataService.getXEntity(assoc.entityName), assocRow, rowIdListToRemove, fileListToRemove, undefined); // zatial zimplementovane len pre prvu uroven
             }
         }
 
@@ -274,14 +277,19 @@ export class XLibService {
         }
 
         // teraz mozme vymazat *toOne asociacie
-        const assocToOneList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-one", "many-to-one"]).filter((assoc: XAssoc) => assoc.isCascadeRemove);
+        const assocToOneList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-one", "many-to-one"]).filter((assoc: XAssoc) => this.filterForAssocToRemove(assoc, assocsToRemove));
         for (const assoc of assocToOneList) {
             const assocRow: any = row[assoc.name];
             // ak je v FK-stlpci null, potom je myslim asociacia null (este by mohla byt undefined (nepritomna))
             if (assocRow) {
-                this.addRowOfEntityToRemove(this.xEntityMetadataService.getXEntity(assoc.entityName), assocRow, rowIdListToRemove, fileListToRemove);
+                this.addRowOfEntityToRemove(this.xEntityMetadataService.getXEntity(assoc.entityName), assocRow, rowIdListToRemove, fileListToRemove, undefined); // zatial zimplementovane len pre prvu uroven
             }
         }
+    }
+
+    // pomocna metodka
+    filterForAssocToRemove(assoc: XAssoc, assocsToRemove?: string[]): boolean {
+        return assoc.isCascadeRemove || (assocsToRemove !== undefined && assocsToRemove.includes(assoc.name));
     }
 
     async deleteRows(manager: EntityManager, entity: string, rowIdList: any[]) {

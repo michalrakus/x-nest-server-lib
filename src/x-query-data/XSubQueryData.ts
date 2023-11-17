@@ -28,6 +28,9 @@ export class XSubQueryData extends XQueryData {
         const selectSubQueryBuilder: SelectQueryBuilder<unknown> = selectQueryBuilder.subQuery();
         selectSubQueryBuilder.select(selection);
         selectSubQueryBuilder.from(this.entity, this.rootAlias);
+        for (const [field, alias] of this.assocAliasMap.entries()) {
+            selectSubQueryBuilder.leftJoin(field, alias);
+        }
         selectSubQueryBuilder.where(this.assocToOneWhereItem);
         if (this.where !== "") {
             selectSubQueryBuilder.andWhere(this.where, this.params);
