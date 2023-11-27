@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
 dependencies:
   '@nestjs/common':
     specifier: ^9.3.9
@@ -38,6 +42,9 @@ dependencies:
     specifier: ^0.6.0
     version: 0.6.0
   passport-jwt:
+    specifier: ^4.0.1
+    version: 4.0.1
+  postgres-interval:
     specifier: ^4.0.1
     version: 4.0.1
   reflect-metadata:
@@ -6149,6 +6156,11 @@ packages:
     resolution: {integrity: sha512-xTgYBc3fuo7Yt7JbiuFxSYGToMoz8fLoE6TC9Wx1P/u+LfeThMOAqmuyECnlBaaJb+u1m9hHiXUEtwW4OzfUJg==}
     engines: {node: '>=0.10.0'}
     dev: true
+
+  /postgres-interval@4.0.1:
+    resolution: {integrity: sha512-51vDq943SQG1lFjIOwU48EabEQLkpXdfYwIVPSWSv6K5imu1kjoev3CuQePEKuAi/4E/Wi8coVyG8yIij89ZOw==}
+    engines: {node: '>=12'}
+    dev: false
 
   /prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}

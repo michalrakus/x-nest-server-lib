@@ -57,6 +57,7 @@
     "@nestjs/typeorm": "^10.0.0",
     "jwks-rsa": "^3.0.1",
     "mysql2": "^2.3.3",
+    "postgres-interval": "^4.0.1",
     "passport": "^0.6.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.13",

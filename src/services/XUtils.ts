@@ -1,5 +1,7 @@
 import {XEnvVar} from "./XEnvVars";
 import {join} from "path";
+import {IPostgresInterval} from "postgres-interval";
+import {ValueTransformer} from "typeorm";
 
 export class XUtils {
 
@@ -38,4 +40,26 @@ export class XUtils {
     static getXFilesDir(): string {
         return join('app-files', 'x-files');
     }
+
+    public static xIntervalTransformer: ValueTransformer = {
+        // typeOrm sends object PostgresInterval into db but db wants string like '5 days 5 hours 5 seconds'
+        // that's why this transformation is necessary
+        to: (interval: IPostgresInterval): string | null => {
+            let result: string | null = null;
+            if (interval) {
+                result = '';
+                if (interval.years) result += `${interval.years} years `;
+                if (interval.months) result += `${interval.months} mons `;
+                if (interval.days) result += `${interval.days} days `;
+                if (interval.hours) result += `${interval.hours} hours `;
+                if (interval.minutes) result += `${interval.minutes} minutes `;
+                if (interval.seconds) result += `${interval.seconds} seconds `;
+            }
+            return result;
+        },
+        // db gives us IPostgresInterval
+        from: (interval: IPostgresInterval): IPostgresInterval => {
+            return interval;
+        },
+    };
 }
