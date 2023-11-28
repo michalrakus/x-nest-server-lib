@@ -4,8 +4,8 @@ name: Build and publish
 on:
   # temporary turn off "push" in order to commit stuff
   push
-  release:
-    types: [published]
+  #release:
+  #  types: [published]
 jobs:
   build-and-publish:
     name: Build and publish
