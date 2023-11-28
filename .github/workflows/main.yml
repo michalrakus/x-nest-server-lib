@@ -3,7 +3,7 @@ name: Build and publish
 
 on:
   # temporary turn off "push" in order to commit stuff
-  #push
+  push
   release:
     types: [published]
 jobs:
