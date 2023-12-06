@@ -2,8 +2,9 @@
 name: Build and publish
 
 on:
-  # temporary turn off "push" in order to commit stuff
-  push
+  # temporary turn off "push" in order to commit stuff (workflow_dispatch enables manually triggering)
+  #push
+  workflow_dispatch
   #release:
   #  types: [published]
 jobs:
