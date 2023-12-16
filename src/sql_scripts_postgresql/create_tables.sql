@@ -64,3 +64,6 @@ CREATE TABLE <schema>.x_file (
 
 ALTER TABLE <schema>.x_file ADD FOREIGN KEY (modif_x_user_id) REFERENCES <schema>.x_user (id);
 CREATE INDEX ON <schema>.x_file (modif_x_user_id);
+
+-- funkcia na odstranenie diakritiky pouzivana vo full-text search (treba ju volat: <schema>.unaccent(<VARCHAR>))
+CREATE EXTENSION unaccent schema <schema>;

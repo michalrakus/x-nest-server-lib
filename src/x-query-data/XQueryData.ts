@@ -3,19 +3,23 @@ import {
     DataTableOperatorFilterMetaData,
     FilterMatchMode
 } from "../serverApi/PrimeFilterSortMeta";
+import {ObjectLiteral} from "typeorm";
+import {XUtils} from "../services/XUtils";
 
 export abstract class XQueryData {
 
     rootAlias: string; // alias for root table of the query, e.g. "t0"
     assocAliasMap: Map<string, string>; // assoc1.assoc2.fieldX = :valueX -> (t0.assoc1, t1), (t1.assoc2, t2)
-    where: string;                      // assoc1.assoc2.fieldX = :valueX -> t2.field = :valueX
-    params: {};                         // {valueX, <valueX>}
+    where: string;                      // assoc1.assoc2.fieldX = :valueX -> t2.fieldX = :valueX
+    params: ObjectLiteral;                         // {valueX, <valueX>}
+    ftsFieldList: string[];             // fts = full-text search
 
     protected constructor(rootAlias: string) {
         this.rootAlias = rootAlias;
         this.assocAliasMap = new Map<string, string>();
         this.where = "";
         this.params = {};
+        this.ftsFieldList = [];
     }
 
     abstract isMainQueryData(): boolean;
@@ -205,10 +209,40 @@ export abstract class XQueryData {
         this.params = {...this.params, ...params};
     }
 
+    addFtsField(ftsField: string) {
+        const field: string = this.getFieldFromPathField(ftsField);
+        // TODO - konverzie
+        // ak field castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
+        this.ftsFieldList.push(`coalesce((${field})::VARCHAR, '')`);
+    }
+
+    // pouzivam ako separator namiesto space-u (' ') lebo space sa moze nachadzat v hodnotach
+    // otazne je ci je to vhodna volba pri pouziti GIN indexu
+    static xFtsSeparator: string = '|';
+
+    createFtsWhereItem(ftsValue: string): string | "" {
+        let whereItem: string | "" = "";
+        if (this.ftsFieldList.length > 0) {
+            // na zaciatok a na koniec pridavame separator '|', vyuzijeme ich ak bude operator startsWith/endsWidth/equals
+            // ILIKE - I = insensitive case
+            // <schema>.unaccent - odstranuje diakritiku - neviem ci je lepsie ju volat raz alebo radsej pre kazdy field zvlast
+            whereItem = `${XUtils.getSchema()}.unaccent('${XQueryData.xFtsSeparator}' || ${this.ftsFieldList.join(` || '${XQueryData.xFtsSeparator}' || `)} || '${XQueryData.xFtsSeparator}') ILIKE ${XUtils.getSchema()}.unaccent('%${ftsValue}%')`;
+        }
+        return whereItem;
+    }
+
     static whereItemAnd(whereItem1: string | "", whereItem2: string | ""): string | "" {
+        return XQueryData.whereItemAndOr("AND", whereItem1, whereItem2);
+    }
+
+    static whereItemOr(whereItem1: string | "", whereItem2: string | ""): string | "" {
+        return XQueryData.whereItemAndOr("OR", whereItem1, whereItem2);
+    }
+
+    static whereItemAndOr(and_or: "AND" | "OR", whereItem1: string | "", whereItem2: string | ""): string | "" {
         let whereItem: string;
         if (whereItem1 !== "" && whereItem2 !== "") {
-            whereItem = `(${whereItem1} AND ${whereItem2})`;
+            whereItem = `(${whereItem1} ${and_or} ${whereItem2})`;
         }
         else {
             whereItem = whereItem1 + whereItem2;

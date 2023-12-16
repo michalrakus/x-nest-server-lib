@@ -3,7 +3,7 @@ import {XEntityMetadataService} from "../services/x-entity-metadata.service";
 import {OrderByCondition} from "typeorm";
 import {XSubQueryData} from "./XSubQueryData";
 import {DataTableFilterMeta, DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
-import {XCustomFilterItem} from "../serverApi/FindParam";
+import {XCustomFilterItem, XFullTextSearch} from "../serverApi/FindParam";
 import {XAssoc, XEntity} from "../serverApi/XEntityMetadata";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 
@@ -16,19 +16,22 @@ export class XMainQueryData extends XQueryData {
     // key in this map is main table alias with OneToMany assoc that creates this XSubQueryData, e.g. "t0.assocXList"
     assocXSubQueryDataMap: Map<string, XSubQueryData>;
     selectItems: string[]; // not used now
+    fullTextSearch: XFullTextSearch | undefined;
     orderByItems: OrderByCondition;
 
-    constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string, filters: DataTableFilterMeta | undefined, customFilterItems: XCustomFilterItem[] | undefined) {
+    constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string, filters: DataTableFilterMeta | undefined, fullTextSearch: XFullTextSearch | undefined, customFilterItems: XCustomFilterItem[] | undefined) {
         super(rootAlias);
         this.xEntityMetadataService = xEntityMetadataService;
         this.xEntity = this.xEntityMetadataService.getXEntity(entity);
         this.assocXSubQueryDataMap = new Map<string, XSubQueryData>();
         this.selectItems = [];
+        this.fullTextSearch = fullTextSearch;
         this.orderByItems = {};
 
         //console.log("filters = " + JSON.stringify(filters));
         //console.log("customFilterItems = " + JSON.stringify(customFilterItems));
         this.addFilters(filters);
+        this.processFullTextSearch();
         this.addCustomFilterItems(customFilterItems);
     }
 
@@ -43,6 +46,18 @@ export class XMainQueryData extends XQueryData {
                 if (this.isFilterValueNotNull(filterValue)) {
                     const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(filterField);
                     xQueryData.addFilterField(filterFieldNew, filterValue);
+                }
+            }
+        }
+    }
+
+    processFullTextSearch() {
+        if (this.fullTextSearch) {
+            const fields: string[] = this.fullTextSearch.fields;
+            if (fields) {
+                for (const field of fields) {
+                    const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(field);
+                    xQueryData.addFtsField(filterFieldNew);
                 }
             }
         }

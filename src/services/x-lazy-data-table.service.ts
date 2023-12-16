@@ -1,7 +1,7 @@
 import {HttpStatus, Injectable} from '@nestjs/common';
 import {FindResult, XAggregateValues} from "../serverApi/FindResult";
 import {DataSource, SelectQueryBuilder} from "typeorm";
-import {FindParam, ResultType} from "../serverApi/FindParam";
+import {FindParam, ResultType, XFullTextSearch} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
 import {ReadStream} from "fs";
@@ -35,7 +35,8 @@ export class XLazyDataTableService {
 
         // TODO - optimalizacia - leftJoin-y sa mozu nahradit za join-y, ak je ManyToOne asociacia not null (join-y su rychlejsie ako leftJoin-y)
 
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", findParam.filters, findParam.customFilterItems);
+        this.createDefaultFieldsForFullTextSearch(findParam.fullTextSearch, findParam.fields);
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", findParam.filters, findParam.fullTextSearch, findParam.customFilterItems);
 
         let rowCount: number;
         const aggregateValues: XAggregateValues = {};
@@ -89,6 +90,35 @@ export class XLazyDataTableService {
                 }
             }
 
+            // pridame pripadne where podmienky pre full-text search
+            // k existujucej where podmienke cez AND pridame:
+            // (<main-query full-text cond> OR EXISTS <sub-query-1 full-text cond> OR EXISTS <sub-query-2 full-text cond> OR ...)
+            // -> a tuto celu podmienku pridame (cez AND) tolkokrat kolko mame hodnot z inputu pre full-text search
+            // (t.j. ak mame na vstupe "Janko Mrkvicka", tak jedna where podmienka bude pre "Janko" a druha pre "Mrkvicka" a budu spojene cez AND)
+            if (findParam.fullTextSearch) {
+                const ftsValueFromParam: string = findParam.fullTextSearch.value;
+                let ftsValueList: string[];
+                if (ftsValueFromParam.trim() === '') {
+                    ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
+                }
+                else {
+                    ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
+                }
+                for (const ftsValue of ftsValueList) {
+                    // vezmeme podmienku z main query
+                    let where = xMainQueryData.createFtsWhereItem(ftsValue);
+                    // vezmeme podmienky zo subqueries
+                    for (const [assocOneToMany, xSubQueryData] of xMainQueryData.assocXSubQueryDataMap.entries()) {
+                        // pridame podmienku EXISTS (subquery)
+                        const selectSubQueryBuilder: SelectQueryBuilder<unknown> = xSubQueryData.createQueryBuilderForFts(selectQueryBuilder, `1`, ftsValue);
+                        if (selectSubQueryBuilder) {
+                            where = XQueryData.whereItemOr(where, `EXISTS (${selectSubQueryBuilder.getQuery()})`);
+                        }
+                    }
+                    selectQueryBuilder.andWhere(`(${where})`);
+                }
+            }
+
             const rowOne = await selectQueryBuilder.getRawOne();
             rowCount = rowOne.count;
             if (findParam.aggregateItems) {
@@ -124,6 +154,7 @@ export class XLazyDataTableService {
     }
 
     // metoda hlavne na zjednotenie spolocneho kodu
+    // TODO - nema ist do XMainQueryData?
     createQueryBuilderFromXMainQuery(xMainQueryData: XMainQueryData): SelectQueryBuilder<unknown> {
 
         // TODO - selectovat len stlpce ktore treba - nepodarilo sa, viac v TODO.txt
@@ -143,6 +174,36 @@ export class XLazyDataTableService {
             where = XQueryData.whereItemAnd(where, xSubQueryData.where);
             params = {...params, ...xSubQueryData.params}; // TODO - nedojde k prepisaniu params? ak ano, druha hodnota prepise tu predchadzajucu
         }
+
+        // TODO - trosku upratat s prvym pouzitim
+        if (xMainQueryData.fullTextSearch) {
+            const ftsValueFromParam: string = xMainQueryData.fullTextSearch.value;
+            let ftsValueList: string[];
+            if (ftsValueFromParam.trim() === '') {
+                ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
+            }
+            else {
+                ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
+            }
+            let ftsWhere: string | "" = "";
+            for (const ftsValue of ftsValueList) {
+                // vezmeme podmienku z main query
+                let ftsWhereForValue: string | "" = xMainQueryData.createFtsWhereItem(ftsValue);
+                // vezmeme podmienky zo subqueries
+                for (const [assocOneToMany, xSubQueryData] of xMainQueryData.assocXSubQueryDataMap.entries()) {
+                    const ftsWhereItem: string | "" = xSubQueryData.createFtsWhereItem(ftsValue);
+                    if (ftsWhereItem) {
+                        ftsWhereForValue = XQueryData.whereItemOr(ftsWhereForValue, ftsWhereItem);
+                    }
+                }
+                if (ftsWhereForValue !== "") {
+                    ftsWhereForValue = `(${ftsWhereForValue})`; // pripadne OR-y uzatvorkujeme
+                }
+                ftsWhere = XQueryData.whereItemAnd(ftsWhere, ftsWhereForValue);
+            }
+            where = XQueryData.whereItemAnd(where, ftsWhere);
+        }
+
         if (where !== "") {
             selectQueryBuilder.where(where, params);
         }
@@ -155,7 +216,7 @@ export class XLazyDataTableService {
     // (v buducnosti mozme viac zjednotit s lazy tabulkou)
     async findRowById(findParam: FindRowByIdParam): Promise<any> {
 
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", undefined, undefined);
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", undefined, undefined, undefined);
         xMainQueryData.addSelectItems(findParam.fields);
 
         const selectQueryBuilder : SelectQueryBuilder<unknown> = this.createQueryBuilderFromXMainQuery(xMainQueryData);
@@ -359,10 +420,19 @@ export class XLazyDataTableService {
 
     private createSelectQueryBuilder(queryParam: LazyDataTableQueryParam): [SelectQueryBuilder<unknown>, boolean] {
 
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, queryParam.entity, "t", queryParam.filters, queryParam.customFilterItems);
+        this.createDefaultFieldsForFullTextSearch(queryParam.fullTextSearch, queryParam.fields);
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, queryParam.entity, "t", queryParam.filters, queryParam.fullTextSearch, queryParam.customFilterItems);
         xMainQueryData.addSelectItems(queryParam.fields);
         xMainQueryData.addOrderByItems(queryParam.multiSortMeta);
         return [this.createQueryBuilderFromXMainQuery(xMainQueryData), xMainQueryData.assocXSubQueryDataMap.size > 0];
+    }
+
+    private createDefaultFieldsForFullTextSearch(fullTextSearch: XFullTextSearch | undefined, fields: string[] | undefined) {
+        if (fullTextSearch) {
+            if (!fullTextSearch.fields) {
+                fullTextSearch.fields = fields; // ako default stlpce pouzijeme stlpce browsu
+            }
+        }
     }
 
     private transformToEntity(data: any, selectQueryBuilder: SelectQueryBuilder<unknown>): any {

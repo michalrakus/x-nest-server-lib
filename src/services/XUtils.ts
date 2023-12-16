@@ -62,4 +62,14 @@ export class XUtils {
             return interval;
         },
     };
+
+    private static schema: string | undefined = undefined;
+
+    static setSchema(schema: string) {
+        XUtils.schema = schema;
+    }
+
+    static getSchema(): string {
+        return XUtils.schema;
+    }
 }

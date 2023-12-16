@@ -37,4 +37,22 @@ export class XSubQueryData extends XQueryData {
         }
         return selectSubQueryBuilder;
     }
+
+    createQueryBuilderForFts(selectQueryBuilder: SelectQueryBuilder<unknown>, selection: string, ftsValue: string): SelectQueryBuilder<unknown> | undefined {
+        let selectSubQueryBuilder: SelectQueryBuilder<unknown> | undefined = undefined;
+        if (this.ftsFieldList.length > 0) {
+            selectSubQueryBuilder = selectQueryBuilder.subQuery();
+            selectSubQueryBuilder.select(selection);
+            selectSubQueryBuilder.from(this.entity, this.rootAlias);
+            for (const [field, alias] of this.assocAliasMap.entries()) {
+                selectSubQueryBuilder.leftJoin(field, alias);
+            }
+            selectSubQueryBuilder.where(this.assocToOneWhereItem);
+            // if (this.where !== "") {
+            //     selectSubQueryBuilder.andWhere(this.where, this.params);
+            // }
+            selectSubQueryBuilder.andWhere(this.createFtsWhereItem(ftsValue), {});
+        }
+        return selectSubQueryBuilder;
+    }
 }
