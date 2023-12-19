@@ -1,9 +1,9 @@
 import {XQueryData} from "./XQueryData";
 import {SelectQueryBuilder} from "typeorm";
+import {XEntityMetadataService} from "../services/x-entity-metadata.service";
 
 export class XSubQueryData extends XQueryData {
 
-    entity: string;
     assocToOneWhereItem: string; // condition to link subquery with main query,
     // example: "t1.assocY = t0.id", where:
     // t1 is rootAlias
@@ -14,9 +14,8 @@ export class XSubQueryData extends XQueryData {
     // key from xAssocSubQueryDataList is used for creating left join (t0.assocXList, <rootAlias>)) in the main query selecting data (detail rows must be selected using left join)
     // assocToOneWhereItem is used to create real SQL subquery - using EXISTS in where condition in count/sum aggregate query or direct in select clause to sum field from detail row
 
-    constructor(entity: string, rootAlias: string, assocToOneWhereItem: string) {
-        super(rootAlias);
-        this.entity = entity;
+    constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string, assocToOneWhereItem: string) {
+        super(xEntityMetadataService, entity, rootAlias);
         this.assocToOneWhereItem = assocToOneWhereItem;
     }
 
@@ -27,7 +26,7 @@ export class XSubQueryData extends XQueryData {
     createQueryBuilder(selectQueryBuilder: SelectQueryBuilder<unknown>, selection: string): SelectQueryBuilder<unknown> {
         const selectSubQueryBuilder: SelectQueryBuilder<unknown> = selectQueryBuilder.subQuery();
         selectSubQueryBuilder.select(selection);
-        selectSubQueryBuilder.from(this.entity, this.rootAlias);
+        selectSubQueryBuilder.from(this.xEntity.name, this.rootAlias);
         for (const [field, alias] of this.assocAliasMap.entries()) {
             selectSubQueryBuilder.leftJoin(field, alias);
         }
@@ -43,7 +42,7 @@ export class XSubQueryData extends XQueryData {
         if (this.ftsFieldList.length > 0) {
             selectSubQueryBuilder = selectQueryBuilder.subQuery();
             selectSubQueryBuilder.select(selection);
-            selectSubQueryBuilder.from(this.entity, this.rootAlias);
+            selectSubQueryBuilder.from(this.xEntity.name, this.rootAlias);
             for (const [field, alias] of this.assocAliasMap.entries()) {
                 selectSubQueryBuilder.leftJoin(field, alias);
             }
@@ -51,8 +50,23 @@ export class XSubQueryData extends XQueryData {
             // if (this.where !== "") {
             //     selectSubQueryBuilder.andWhere(this.where, this.params);
             // }
-            selectSubQueryBuilder.andWhere(this.createFtsWhereItem(ftsValue), {});
+            selectSubQueryBuilder.andWhere(this.createFtsWhereItemForQuery(ftsValue), {});
         }
         return selectSubQueryBuilder;
+    }
+
+    createFtsWhereItemForSubQuery(mainQueryBuilderForExistsSubQueries: SelectQueryBuilder<unknown> | undefined, ftsValue: string): string | "" {
+        let where: string | "" = "";
+        if (mainQueryBuilderForExistsSubQueries) {
+            // pridame podmienku EXISTS (subquery)
+            const selectSubQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderForFts(mainQueryBuilderForExistsSubQueries, `1`, ftsValue);
+            if (selectSubQueryBuilder) {
+                where = `EXISTS (${selectSubQueryBuilder.getQuery()})`;
+            }
+        }
+        else {
+            where = this.createFtsWhereItemForQuery(ftsValue);
+        }
+        return where;
     }
 }

@@ -95,28 +95,10 @@ export class XLazyDataTableService {
             // (<main-query full-text cond> OR EXISTS <sub-query-1 full-text cond> OR EXISTS <sub-query-2 full-text cond> OR ...)
             // -> a tuto celu podmienku pridame (cez AND) tolkokrat kolko mame hodnot z inputu pre full-text search
             // (t.j. ak mame na vstupe "Janko Mrkvicka", tak jedna where podmienka bude pre "Janko" a druha pre "Mrkvicka" a budu spojene cez AND)
-            if (findParam.fullTextSearch) {
-                const ftsValueFromParam: string = findParam.fullTextSearch.value;
-                let ftsValueList: string[];
-                if (ftsValueFromParam.trim() === '') {
-                    ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
-                }
-                else {
-                    ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
-                }
-                for (const ftsValue of ftsValueList) {
-                    // vezmeme podmienku z main query
-                    let where = xMainQueryData.createFtsWhereItem(ftsValue);
-                    // vezmeme podmienky zo subqueries
-                    for (const [assocOneToMany, xSubQueryData] of xMainQueryData.assocXSubQueryDataMap.entries()) {
-                        // pridame podmienku EXISTS (subquery)
-                        const selectSubQueryBuilder: SelectQueryBuilder<unknown> = xSubQueryData.createQueryBuilderForFts(selectQueryBuilder, `1`, ftsValue);
-                        if (selectSubQueryBuilder) {
-                            where = XQueryData.whereItemOr(where, `EXISTS (${selectSubQueryBuilder.getQuery()})`);
-                        }
-                    }
-                    selectQueryBuilder.andWhere(`(${where})`);
-                }
+            // param selectQueryBuilder = bude vytvarat EXISTS podmienky pre subqueries
+            const ftsWhereItem: string | "" = xMainQueryData.createFtsWhereItem(selectQueryBuilder);
+            if (ftsWhereItem !== "") {
+                selectQueryBuilder.andWhere(`(${ftsWhereItem})`);
             }
 
             const rowOne = await selectQueryBuilder.getRawOne();
@@ -154,11 +136,13 @@ export class XLazyDataTableService {
     }
 
     // metoda hlavne na zjednotenie spolocneho kodu
-    // TODO - nema ist do XMainQueryData?
+    // TODO - nema ist do XMainQueryData? mal by ale potom aj vytvraranie query builder pre COUNT/SUM select by malo ist do XMainQueryData, zatial nechame
     createQueryBuilderFromXMainQuery(xMainQueryData: XMainQueryData): SelectQueryBuilder<unknown> {
 
         // TODO - selectovat len stlpce ktore treba - nepodarilo sa, viac v TODO.txt
         // TODO - tabulky pridane pri vytvoreni xMainQueryData.orderByItems nemusime selectovat, staci ich joinovat, ale koli jednoduchosti ich tiez selectujeme
+        // TODO - podobne aj tabulky pridane cez custom filter alebo cez full-text search ktory obsahuje ine stlpce ako su v browse - tie tiez nepotrebujeme selectovat,
+        // t.j. netreba volat leftJoinAndSelect(field, alias), staci volat leftJoin(field, alias) - chcelo by to okrem alias-u si zapisovat aj ci treba aj select (boolean hodnotu)
         const selectQueryBuilder: SelectQueryBuilder<unknown> = this.dataSource.createQueryBuilder(xMainQueryData.xEntity.name, xMainQueryData.rootAlias);
         for (const [field, alias] of xMainQueryData.assocAliasMap.entries()) {
             selectQueryBuilder.leftJoinAndSelect(field, alias);
@@ -175,34 +159,8 @@ export class XLazyDataTableService {
             params = {...params, ...xSubQueryData.params}; // TODO - nedojde k prepisaniu params? ak ano, druha hodnota prepise tu predchadzajucu
         }
 
-        // TODO - trosku upratat s prvym pouzitim
-        if (xMainQueryData.fullTextSearch) {
-            const ftsValueFromParam: string = xMainQueryData.fullTextSearch.value;
-            let ftsValueList: string[];
-            if (ftsValueFromParam.trim() === '') {
-                ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
-            }
-            else {
-                ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
-            }
-            let ftsWhere: string | "" = "";
-            for (const ftsValue of ftsValueList) {
-                // vezmeme podmienku z main query
-                let ftsWhereForValue: string | "" = xMainQueryData.createFtsWhereItem(ftsValue);
-                // vezmeme podmienky zo subqueries
-                for (const [assocOneToMany, xSubQueryData] of xMainQueryData.assocXSubQueryDataMap.entries()) {
-                    const ftsWhereItem: string | "" = xSubQueryData.createFtsWhereItem(ftsValue);
-                    if (ftsWhereItem) {
-                        ftsWhereForValue = XQueryData.whereItemOr(ftsWhereForValue, ftsWhereItem);
-                    }
-                }
-                if (ftsWhereForValue !== "") {
-                    ftsWhereForValue = `(${ftsWhereForValue})`; // pripadne OR-y uzatvorkujeme
-                }
-                ftsWhere = XQueryData.whereItemAnd(ftsWhere, ftsWhereForValue);
-            }
-            where = XQueryData.whereItemAnd(where, ftsWhere);
-        }
+        // param undefined = nechceme EXISTS, chceme klasicke where podmienky
+        where = XQueryData.whereItemAnd(where, xMainQueryData.createFtsWhereItem(undefined));
 
         if (where !== "") {
             selectQueryBuilder.where(where, params);

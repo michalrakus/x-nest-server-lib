@@ -12,3 +12,9 @@ export function numberFromModel(value: any): number | null {
     }
     return numberValue;
 }
+
+// aby sme sa vyhli sql injection problemu - tam kde je problematicke pouzivat klasicke params
+export function stringAsDB(value: string | null): string {
+    return value !== null ? `'${value.replaceAll("'", "''")}'` : "NULL";
+}
+

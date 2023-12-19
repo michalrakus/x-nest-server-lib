@@ -5,8 +5,15 @@ import {
 } from "../serverApi/PrimeFilterSortMeta";
 import {ObjectLiteral} from "typeorm";
 import {XUtils} from "../services/XUtils";
+import {XEntityMetadataService} from "../services/x-entity-metadata.service";
+import {XEntity, XField} from "../serverApi/XEntityMetadata";
+import {stringAsDB} from "../services/XUtilsConversions";
 
 export abstract class XQueryData {
+
+    // helper members
+    xEntityMetadataService: XEntityMetadataService;
+    xEntity: XEntity;
 
     rootAlias: string; // alias for root table of the query, e.g. "t0"
     assocAliasMap: Map<string, string>; // assoc1.assoc2.fieldX = :valueX -> (t0.assoc1, t1), (t1.assoc2, t2)
@@ -14,7 +21,9 @@ export abstract class XQueryData {
     params: ObjectLiteral;                         // {valueX, <valueX>}
     ftsFieldList: string[];             // fts = full-text search
 
-    protected constructor(rootAlias: string) {
+    protected constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string) {
+        this.xEntityMetadataService = xEntityMetadataService;
+        this.xEntity = this.xEntityMetadataService.getXEntity(entity);
         this.rootAlias = rootAlias;
         this.assocAliasMap = new Map<string, string>();
         this.where = "";
@@ -210,23 +219,33 @@ export abstract class XQueryData {
     }
 
     addFtsField(ftsField: string) {
-        const field: string = this.getFieldFromPathField(ftsField);
+        const xField: XField = this.xEntityMetadataService.getXFieldByPath(this.xEntity, ftsField);
+        let dbCast: string;
+        if (xField.type === "boolean") {
+            dbCast = "::INT::VARCHAR"; // nechceme vytvorit hodnoty |true| reps. |false|, radsej vytvorime |1| resp. |0|
+                                        // - tie sa budu menej pliest s vyhladavaniami zameranymi na ine stlpce
+        }
+        else {
+            dbCast = "::VARCHAR";
+        }
+        const dbField: string = this.getFieldFromPathField(ftsField);
         // TODO - konverzie
-        // ak field castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
-        this.ftsFieldList.push(`coalesce((${field})::VARCHAR, '')`);
+        // ak dbField castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
+        this.ftsFieldList.push(`coalesce((${dbField})${dbCast}, '')`);
     }
 
     // pouzivam ako separator namiesto space-u (' ') lebo space sa moze nachadzat v hodnotach
     // otazne je ci je to vhodna volba pri pouziti GIN indexu
     static xFtsSeparator: string = '|';
 
-    createFtsWhereItem(ftsValue: string): string | "" {
+    createFtsWhereItemForQuery(ftsValue: string): string | "" {
         let whereItem: string | "" = "";
         if (this.ftsFieldList.length > 0) {
             // na zaciatok a na koniec pridavame separator '|', vyuzijeme ich ak bude operator startsWith/endsWidth/equals
             // ILIKE - I = insensitive case
             // <schema>.unaccent - odstranuje diakritiku - neviem ci je lepsie ju volat raz alebo radsej pre kazdy field zvlast
-            whereItem = `${XUtils.getSchema()}.unaccent('${XQueryData.xFtsSeparator}' || ${this.ftsFieldList.join(` || '${XQueryData.xFtsSeparator}' || `)} || '${XQueryData.xFtsSeparator}') ILIKE ${XUtils.getSchema()}.unaccent('%${ftsValue}%')`;
+            const ftsValueDB: string = stringAsDB(`%${ftsValue}%`);
+            whereItem = `${XUtils.getSchema()}.unaccent('${XQueryData.xFtsSeparator}' || ${this.ftsFieldList.join(` || '${XQueryData.xFtsSeparator}' || `)} || '${XQueryData.xFtsSeparator}') ILIKE ${XUtils.getSchema()}.unaccent(${ftsValueDB})`;
         }
         return whereItem;
     }

@@ -1,6 +1,6 @@
 import {XQueryData} from "./XQueryData";
 import {XEntityMetadataService} from "../services/x-entity-metadata.service";
-import {OrderByCondition} from "typeorm";
+import {OrderByCondition, SelectQueryBuilder} from "typeorm";
 import {XSubQueryData} from "./XSubQueryData";
 import {DataTableFilterMeta, DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
 import {XCustomFilterItem, XFullTextSearch} from "../serverApi/FindParam";
@@ -9,10 +9,6 @@ import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 
 export class XMainQueryData extends XQueryData {
 
-    // helper members
-    xEntityMetadataService: XEntityMetadataService;
-    xEntity: XEntity;
-
     // key in this map is main table alias with OneToMany assoc that creates this XSubQueryData, e.g. "t0.assocXList"
     assocXSubQueryDataMap: Map<string, XSubQueryData>;
     selectItems: string[]; // not used now
@@ -20,9 +16,7 @@ export class XMainQueryData extends XQueryData {
     orderByItems: OrderByCondition;
 
     constructor(xEntityMetadataService: XEntityMetadataService, entity: string, rootAlias: string, filters: DataTableFilterMeta | undefined, fullTextSearch: XFullTextSearch | undefined, customFilterItems: XCustomFilterItem[] | undefined) {
-        super(rootAlias);
-        this.xEntityMetadataService = xEntityMetadataService;
-        this.xEntity = this.xEntityMetadataService.getXEntity(entity);
+        super(xEntityMetadataService, entity, rootAlias);
         this.assocXSubQueryDataMap = new Map<string, XSubQueryData>();
         this.selectItems = [];
         this.fullTextSearch = fullTextSearch;
@@ -38,6 +32,8 @@ export class XMainQueryData extends XQueryData {
     isMainQueryData(): boolean {
         return true;
     }
+
+    // ******************* methods for creating data in member variables  ********************
 
     addFilters(filters: DataTableFilterMeta | undefined) {
         if (filters) {
@@ -151,9 +147,42 @@ export class XMainQueryData extends XQueryData {
         if (xSubQueryData === undefined) {
             const aliasSubQuery: string = "ts" + (this.assocXSubQueryDataMap.size + 1).toString();
             const assocToOneWhereItem: string = `${aliasSubQuery}.${xAssocOneToMany.inverseAssocName} = ${this.rootAlias}.${this.xEntity.idField}`;
-            xSubQueryData = new XSubQueryData(xAssocOneToMany.entityName, aliasSubQuery, assocToOneWhereItem);
+            xSubQueryData = new XSubQueryData(this.xEntityMetadataService, xAssocOneToMany.entityName, aliasSubQuery, assocToOneWhereItem);
             this.assocXSubQueryDataMap.set(aliasAssocOneToMany, xSubQueryData);
         }
         return xSubQueryData;
+    }
+
+    // ******************* methods for processing created data - creating where items, creating SelectQueryBuilder ********************
+
+    /**
+     * @param mainQueryBuilderForExistsSubQueries - if not undefined, method creates EXISTS where items for subqueries (used for COUNT/SUM/... selects)
+     */
+    createFtsWhereItem(mainQueryBuilderForExistsSubQueries: SelectQueryBuilder<unknown> | undefined): string | "" {
+
+        let ftsWhere: string | "" = "";
+        if (this.fullTextSearch) {
+            const ftsValueFromParam: string = this.fullTextSearch.value;
+            let ftsValueList: string[];
+            if (ftsValueFromParam.trim() === '') {
+                ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
+            }
+            else {
+                ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
+            }
+            for (const ftsValue of ftsValueList) {
+                // vezmeme podmienku z main query
+                let ftsWhereForValue: string | "" = this.createFtsWhereItemForQuery(ftsValue);
+                // vezmeme podmienky zo subqueries
+                for (const [assocOneToMany, xSubQueryData] of this.assocXSubQueryDataMap.entries()) {
+                    ftsWhereForValue = XQueryData.whereItemOr(ftsWhereForValue, xSubQueryData.createFtsWhereItemForSubQuery(mainQueryBuilderForExistsSubQueries, ftsValue));
+                }
+                if (ftsWhereForValue !== "") {
+                    ftsWhereForValue = `(${ftsWhereForValue})`; // pripadne OR-y uzatvorkujeme
+                }
+                ftsWhere = XQueryData.whereItemAnd(ftsWhere, ftsWhereForValue);
+            }
+        }
+        return ftsWhere;
     }
 }
