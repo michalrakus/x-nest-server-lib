@@ -51,6 +51,10 @@ export class XEntityMetadataService {
                 else if (type === "int" || type === "integer") {
                     type = "number";
                 }
+                // entity generator pre postgres generuje pre db stlpce typu DECIMAL (financne sumy) typ numeric - na frontende pouzivame decimal
+                else if (type === "numeric") {
+                    type = "decimal";
+                }
                 // postgres nepouziva datetime ale timestamp, ale na klientovi riesime datetime stlpce pomocou typu datetime
                 else if (type === "timestamp" || type === "timestamp without time zone") {
                     type = "datetime";
