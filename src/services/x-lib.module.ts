@@ -28,6 +28,7 @@ export class XLibModule {
         // servisy ktore su dostupne v inych moduloch
         exports: [
             XLibService,
+            XFileService,
             XLazyDataTableService,
             XExportService
         ],

@@ -2,7 +2,7 @@ import {HttpStatus, Injectable} from "@nestjs/common";
 import {Response} from "express";
 import {CsvDecimalFormat, CsvEncoding, CsvParam, ExportParam} from "../serverApi/ExportImportParam";
 import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
-import {numberFromModel} from "./XUtilsConversions";
+import {numberFromModel} from "../serverApi/XUtilsConversions";
 // poznamka - ked tu bolo: import iconv from "iconv-lite"; tak to nefungovalo a zevraj to suvisi s nestjs
 import * as iconv from "iconv-lite";
 

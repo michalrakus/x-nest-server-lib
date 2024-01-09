@@ -35,6 +35,9 @@ dependencies:
   jwks-rsa:
     specifier: ^3.0.1
     version: 3.0.1
+  lodash:
+    specifier: ^4.17.21
+    version: 4.17.21
   mysql2:
     specifier: ^2.3.3
     version: 2.3.3
@@ -76,6 +79,9 @@ devDependencies:
   '@types/jest':
     specifier: 29.4.0
     version: 29.4.0
+  '@types/lodash':
+    specifier: ^4.14.202
+    version: 4.14.202
   '@types/multer':
     specifier: ^1.4.7
     version: 1.4.7
@@ -1270,6 +1276,10 @@ packages:
     resolution: {integrity: sha512-c5ltxazpWabia/4UzhIoaDcIza4KViOQhdbjRlfcIGVnsE3c3brkz9Z+F/EeJIECOQP7W7US2hNE930cWWkPiw==}
     dependencies:
       '@types/node': 18.13.0
+
+  /@types/lodash@4.14.202:
+    resolution: {integrity: sha512-OvlIYQK9tNneDlS0VN54LLd5uiPCBOp7gS5Z0f1mjoJYBrtStzgmJBxONW3U6OZqdtNzZPmn9BS/7WI7BFFcFQ==}
+    dev: true
 
   /@types/mime@3.0.1:
     resolution: {integrity: sha512-Y4XFY5VJAuw0FgAqPNd6NNoV44jbq9Bz2L7Rh/J6jLTiHBSBJa9fxqQIvkIld4GsoDOcCbvzOUAbLPsSKKg+uA==}

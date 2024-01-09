@@ -7,7 +7,8 @@ import {ObjectLiteral} from "typeorm";
 import {XUtils} from "../services/XUtils";
 import {XEntityMetadataService} from "../services/x-entity-metadata.service";
 import {XEntity, XField} from "../serverApi/XEntityMetadata";
-import {stringAsDB} from "../services/XUtilsConversions";
+import {stringAsDB} from "../serverApi/XUtilsConversions";
+import {XEnvVar} from "../services/XEnvVars";
 
 export abstract class XQueryData {
 
@@ -97,16 +98,16 @@ export abstract class XQueryData {
             }
             switch (filterItem.matchMode) {
                 case FilterMatchMode.STARTS_WITH:
-                    whereItem = this.createWhereItemBase(field, "LIKE", paramName, `${filterItem.value}%`);
+                    whereItem = this.createWhereItemBaseLike(field, false, paramName, `${filterItem.value}%`);
                     break;
                 case FilterMatchMode.CONTAINS:
-                    whereItem = this.createWhereItemBase(field, "LIKE", paramName, `%${filterItem.value}%`);
+                    whereItem = this.createWhereItemBaseLike(field, false, paramName, `%${filterItem.value}%`);
                     break;
                 case FilterMatchMode.NOT_CONTAINS:
-                    whereItem = this.createWhereItemBase(field, "NOT LIKE", paramName, `%${filterItem.value}%`);
+                    whereItem = this.createWhereItemBaseLike(field, true, paramName, `%${filterItem.value}%`);
                     break;
                 case FilterMatchMode.ENDS_WITH:
-                    whereItem = this.createWhereItemBase(field, "LIKE", paramName, `%${filterItem.value}`);
+                    whereItem = this.createWhereItemBaseLike(field, false, paramName, `%${filterItem.value}`);
                     break;
                 case FilterMatchMode.EQUALS:
                 case FilterMatchMode.DATE_IS:
@@ -164,6 +165,21 @@ export abstract class XQueryData {
                 throw `Unexpected error - function this.isFilterItemNotNull(filterItem) returned true, but whereItem was not created. filterItem = ${JSON.stringify(filterItem)}`;
             }
         }
+        return whereItem;
+    }
+
+    createWhereItemBaseLike(field: string, not: boolean, paramName: string, paramValue: any): string {
+        const notOperator: string = not ? "NOT " : "";
+        let whereItem: string;
+        // AI/CI search works only for postgres (for mysql must be false, AI/CI can be achieved by using proprietary default collation, e.g. utf8mb4_0900_ai_ci)
+        if (XUtils.getEnvVarValueBoolean(XEnvVar.X_STRING_DB_SEARCH_AI_CI)) {
+            whereItem = `${XUtils.getSchema()}.unaccent(${field}) ${notOperator}ILIKE ${XUtils.getSchema()}.unaccent(:${paramName})`;
+            this.params[paramName] = paramValue;
+        }
+        else {
+            whereItem = this.createWhereItemBase(field, `${notOperator}LIKE`, paramName, paramValue);
+        }
+
         return whereItem;
     }
 
