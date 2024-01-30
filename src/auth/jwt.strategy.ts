@@ -39,6 +39,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'x-jwt-strategy') {
             });
         }
         else {
+            console.log(`JwtStrategy: authentication not implemented for X_AUTH = ${XUtils.getEnvVarValue(XEnvVar.X_AUTH)}`);
             throw `JwtStrategy: authentication not implemented for X_AUTH = ${XUtils.getEnvVarValue(XEnvVar.X_AUTH)}`;
         }
     }

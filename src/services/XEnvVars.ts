@@ -21,6 +21,7 @@ export enum XProtocol {
 
 // enum for values of the environment variable X_AUTH
 export enum XAuth {
+    OFF = 'OFF',
     LOCAL = 'LOCAL',
     AUTH0 = 'AUTH0',
     MS_ENTRA_ID = 'MS_ENTRA_ID'

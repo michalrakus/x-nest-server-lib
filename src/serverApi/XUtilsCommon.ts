@@ -22,6 +22,46 @@ export class XUtilsCommon {
         }
     }
 
+    // vseobecnejsia verzia, ktora funguje aj pre *toMany asociacie
+    // TODO - toto by sme mohli doplnit o kontrolu ak programator urobil preklep
+    static getValueOrValueListByPath(object: any, path: string): any | any[] {
+        const [field, restPath] = XUtilsCommon.getFieldAndRestPath(path);
+        if (restPath === null) {
+            return object[field];
+        }
+        else {
+            const assocObject = object[field];
+            if (Array.isArray(assocObject)) {
+                // natrafili sme na pole (atribut "field" je *toMany asociacia), pozbierame hodnoty z pola
+                const resultValueList: any[] = [];
+                for (const assocObjectItem of assocObject) {
+                    if (assocObjectItem !== null && assocObjectItem !== undefined) { // pre istotu, nemalo by nastat
+                        const itemValue: any | any[] = XUtilsCommon.getValueOrValueListByPath(assocObjectItem, restPath);
+                        if (Array.isArray(itemValue)) {
+                            resultValueList.push(...itemValue);
+                        }
+                        else {
+                            resultValueList.push(itemValue);
+                        }
+                    }
+                    else {
+                        resultValueList.push(null);
+                    }
+                }
+                return resultValueList;
+            }
+            else {
+                // pri vytvarani noveho riadku - assocObject neni v novom objekte ani ako null (je undefined)
+                if (assocObject !== null && assocObject !== undefined) {
+                    return XUtilsCommon.getValueOrValueListByPath(assocObject, restPath);
+                }
+                else {
+                    return null; // asociovany objekt je null, aj hodnota atributu bude null
+                }
+            }
+        }
+    }
+
     static getFieldListForPath(path: string): string[] {
         return path.split('.');
     }
@@ -80,7 +120,7 @@ export class XUtilsCommon {
         return json;
     }
 
-    static getDayName(date: Date): string | undefined {
+    static getDayName(date: Date | null | undefined): string | undefined {
         const days = ['nedeľa', 'pondelok', 'utorok', 'streda', 'štvrtok', 'piatok', 'sobota'];
         return date ? days[date.getDay()] : undefined;
     }
@@ -97,6 +137,11 @@ export class XUtilsCommon {
     static findFirstMatch(pattern: RegExp, value: string): string | null {
         const match: RegExpExecArray | null = pattern.exec(value);
         return match != null ? match[0] : null;
+    }
+
+    // to be used in sql expressions
+    static sqlMaxDateIfNull(sqlExp: string): string {
+        return `coalesce(${sqlExp}, '9999-12-31'::DATE)`;
     }
 }
 
