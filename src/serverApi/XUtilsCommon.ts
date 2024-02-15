@@ -62,6 +62,21 @@ export class XUtilsCommon {
         }
     }
 
+    static setValueByPath(object: any, path: string, value: any) {
+        const [pathToAssoc, field]: [string | null, string] = XUtilsCommon.getPathToAssocAndField(path);
+        if (pathToAssoc !== null) {
+            const assocObject = XUtilsCommon.getValueByPath(object, pathToAssoc);
+            // if null or undefined or is not object, then error
+            if (assocObject === null || assocObject === undefined || typeof assocObject !== 'object') {
+                console.log(`XUtilsCommon.setValueByPath: could not set value ${value} into object property ${path}. Assoc object not found (found value: ${assocObject}). Main object:`);
+                console.log(object);
+                throw `setValueByPath: could not set value ${value} into object property ${path}. Assoc object not found. The main object can be seen in log.`;
+            }
+            object = assocObject;
+        }
+        object[field] = value;
+    }
+
     static getFieldListForPath(path: string): string[] {
         return path.split('.');
     }
@@ -85,6 +100,16 @@ export class XUtilsCommon {
         }
         else {
             return path.substring(0, posDot);
+        }
+    }
+
+    static getPathToAssocAndField(path: string): [string | null, string] {
+        const posDot : number = path.lastIndexOf(".");
+        if (posDot === -1) {
+            return [null, path];
+        }
+        else {
+            return [path.substring(0, posDot), path.substring(posDot + 1)];
         }
     }
 

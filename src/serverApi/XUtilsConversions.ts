@@ -23,13 +23,18 @@ export function stringAsDB(value: string | null): string {
     return value !== null ? `'${value.replaceAll("'", "''")}'` : "NULL";
 }
 
-export function numberFromUI(stringValue: string): number | null {
-    let value: number | null;
+export function intFromUI(stringValue: string): number | null | undefined {
+    // convert stringValue (e.g. 1234) into integer number
+    // if stringValue is invalid, returns undefined
+    let value: number | null | undefined;
     if (stringValue === '') {
         value = null;
     }
     else {
-        value = parseInt(stringValue, 10);
+        value = parseInt(stringValue, 10); // 1234xxx vrati number 1234, preto testujeme aj value.toString() !== stringValue
+        if (isNaN(value) || value.toString() !== stringValue) {
+            value = undefined;
+        }
     }
     return value;
 }
@@ -192,8 +197,8 @@ export function booleanAsUIText(value: boolean | null): string {
 }
 
 export enum AsUIType {
-    Form, // formulare - boolean sa ponecha, neskor sa konvertuje na Checkbox
-    Text// reporty - boolean sa konvertuje na ano/nie
+    Form = 1, // formulare - boolean sa ponecha, neskor sa konvertuje na Checkbox
+    Text = 2  // reporty - boolean sa konvertuje na ano/nie
 }
 
 /**
