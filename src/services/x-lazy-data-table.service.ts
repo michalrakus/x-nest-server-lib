@@ -1,23 +1,27 @@
 import {HttpStatus, Injectable} from '@nestjs/common';
 import {FindResult, XAggregateValues} from "../serverApi/FindResult";
 import {DataSource, SelectQueryBuilder} from "typeorm";
-import {FindParam, ResultType, XFullTextSearch} from "../serverApi/FindParam";
+import {
+    FindParam,
+    ResultType,
+    XCustomFilterItem,
+    XFullTextSearch,
+    XLazyAutoCompleteSuggestionsRequest
+} from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
 import {ReadStream} from "fs";
 import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transformer/RawSqlResultsToEntityTransformer";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
-import {
-    LazyDataTableQueryParam,
-    ExportType,
-    ExportParam
-} from "../serverApi/ExportImportParam";
+import {ExportParam, ExportType, LazyDataTableQueryParam} from "../serverApi/ExportImportParam";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XAssoc, XEntity, XField} from "../serverApi/XEntityMetadata";
 import {XMainQueryData} from "../x-query-data/XMainQueryData";
 import {XQueryData} from "../x-query-data/XQueryData";
 import {XSubQueryData} from "../x-query-data/XSubQueryData";
 import {XCsvWriter, XExportService} from "./x-export.service";
+import {XUtils} from "./XUtils";
+import {stringAsDB} from "../serverApi/XUtilsConversions";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -398,6 +402,47 @@ export class XLazyDataTableService {
         const transformer = new RawSqlResultsToEntityTransformer(selectQueryBuilder.expressionMap, selectQueryBuilder.connection.driver, [], [], undefined);
         const entityList: any[] = transformer.transform([data], selectQueryBuilder.expressionMap.mainAlias!);
         return entityList[0];
+    }
+
+    // ************** podpora pre autocomplete ******************
+
+    async lazyAutoCompleteSuggestions(suggestionsRequest: XLazyAutoCompleteSuggestionsRequest): Promise<FindResult> {
+
+        let filterItems: XCustomFilterItem[] = [];
+        if (suggestionsRequest.filterItems) {
+            filterItems.push(...suggestionsRequest.filterItems);
+        }
+        const queryValueFromParam: string = suggestionsRequest.queryValue.trim();
+        if (queryValueFromParam.length) {
+            // uzivatel nieco natypoval
+            // ak mame viac hodnot oddelenych space-om, tak kazda hodnota sa musi vyskytovat zvlast
+            // (podobny princip ako pri full text search - XMainQueryData.createFtsWhereItem)
+            let queryValueList: string[];
+            if (suggestionsRequest.splitQueryValue) {
+                queryValueList = queryValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
+            }
+            else {
+                queryValueList = [queryValueFromParam]; // nesplitujeme
+            }
+            for (const queryValue of queryValueList) {
+                // TODO - upravit aby fungovalo aj pre ne-string hodnoty
+                const queryValueDB: string = stringAsDB(`%${queryValue}%`);
+                filterItems.push({where: `${XUtils.getSchema()}.unaccent([${suggestionsRequest.field}]) ILIKE ${XUtils.getSchema()}.unaccent(${queryValueDB})`, params: {}});
+            }
+        }
+        const findParamCount: FindParam = {resultType: ResultType.OnlyRowCount, entity: suggestionsRequest.entity, customFilterItems: filterItems};
+        let findResult: FindResult = await this.findRows(findParamCount);
+        if (findResult.totalRecords <= suggestionsRequest.maxRows) {
+            const findParamRows: FindParam = {
+                resultType: ResultType.AllRows,
+                entity: suggestionsRequest.entity,
+                customFilterItems: filterItems,
+                multiSortMeta: suggestionsRequest.multiSortMeta,
+                fields: suggestionsRequest.fields
+            };
+            findResult = await this.findRows(findParamRows);
+        }
+        return findResult;
     }
 
     // ************** stary nepouzivany export ******************

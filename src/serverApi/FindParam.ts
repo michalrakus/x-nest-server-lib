@@ -65,3 +65,16 @@ export interface FindParam {
     fields?: string[];
     aggregateItems?: XAggregateItem[];
 }
+
+// TODO - idealne spravit x-query-api.ts a tam supnut vsetky Request/Response typy ktore vytvaraju joiny, where podmienky (FindParam.ts, FindResult.ts, ...)
+// taky jednoduchsi FindParam
+export interface XLazyAutoCompleteSuggestionsRequest {
+    maxRows: number;
+    field: string;
+    queryValue: string; // string from autocomplete input
+    splitQueryValue: boolean;
+    entity: string;
+    filterItems?: XCustomFilterItem[];
+    multiSortMeta?: DataTableSortMeta[]; // typ []
+    fields?: string[];
+}

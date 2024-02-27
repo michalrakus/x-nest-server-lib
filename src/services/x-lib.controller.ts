@@ -11,7 +11,7 @@ import {XLazyDataTableService} from "./x-lazy-data-table.service";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XEntityMap} from "../serverApi/XEntityMetadata";
 import {XUserAuthenticationRequest, XUserAuthenticationResponse} from "../serverApi/XUserAuthenticationIfc";
-import {FindParam} from "../serverApi/FindParam";
+import {FindParam, XLazyAutoCompleteSuggestionsRequest} from "../serverApi/FindParam";
 import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {SaveRowParam} from "./SaveRowParam";
@@ -50,6 +50,11 @@ export class XLibController {
 
         // metoda export zapisuje do "res"
         await this.xLazyDataTableService.export(body, res);
+    }
+
+    @Post('x-lazy-auto-complete-suggestions')
+    lazyAutoCompleteSuggestions(@Body() body: XLazyAutoCompleteSuggestionsRequest): Promise<FindResult> {
+        return this.xLazyDataTableService.lazyAutoCompleteSuggestions(body);
     }
 
     /**

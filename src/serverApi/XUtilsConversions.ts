@@ -1,4 +1,4 @@
-import {dateFormat} from "./XUtilsCommon";
+import {dateFormat, XUtilsCommon} from "./XUtilsCommon";
 import {XAssoc, XEntity, XField} from "./XEntityMetadata";
 import {XUtilsMetadataCommon} from "./XUtilsMetadataCommon";
 import {IPostgresInterval} from "postgres-interval";
@@ -26,14 +26,17 @@ export function stringAsDB(value: string | null): string {
 export function intFromUI(stringValue: string): number | null | undefined {
     // convert stringValue (e.g. 1234) into integer number
     // if stringValue is invalid, returns undefined
-    let value: number | null | undefined;
+    let value: number | null | undefined = undefined;
     if (stringValue === '') {
         value = null;
     }
     else {
-        value = parseInt(stringValue, 10); // 1234xxx vrati number 1234, preto testujeme aj value.toString() !== stringValue
-        if (isNaN(value) || value.toString() !== stringValue) {
-            value = undefined;
+        if (XUtilsCommon.isInt(stringValue)) {
+            // 1234xxx vrati number 1234, preto sme spravili test isInt
+            value = parseInt(stringValue, 10);
+            if (isNaN(value)) {
+                value = undefined;
+            }
         }
     }
     return value;
@@ -76,6 +79,65 @@ export function dateFromModel(value: any): Date | null {
     }
     return dateValue;
 }
+
+export function dateFromUI(valueString: string): Date | null | undefined {
+    // converts valueString (e.g. 21.2.2024) into Date
+    // if stringValue is invalid, returns undefined
+    let valueDate: Date | null | undefined = undefined;
+    if (valueString === '') {
+        valueDate = null;
+    }
+    else {
+        // null znamena nezadane (doplni sa podla aktualneho datumu), undefined znamena zadana nekorektna hodnota
+        let day: number | null | undefined;
+        let month: number | null | undefined = null;
+        let year: number | null | undefined = null;
+
+        const posDot = valueString.indexOf('.');
+        if (posDot === -1) {
+            day = intFromUI(valueString);
+        }
+        else {
+            day = intFromUI(valueString.substring(0, posDot));
+            const rest: string = valueString.substring(posDot + 1);
+            const posDot2 = rest.indexOf('.');
+            if (posDot2 === -1) {
+                month = intFromUI(rest);
+            }
+            else {
+                month = intFromUI(rest.substring(0, posDot2));
+                year = intFromUI(rest.substring(posDot2 + 1));
+            }
+        }
+
+        // doplnime mesiac a rok ak uzivatel nezadal (ak mame undefined, tak umyselne nedoplname)
+        if (month === null) {
+            month = XUtilsCommon.today().getMonth() + 1; // o 1 mesiac viac (januar je 0)
+        }
+        if (year === null) {
+            year = XUtilsCommon.today().getFullYear();
+        }
+
+        // ak day alebo month alebo year zostal undefined, tak user zadal nekorektnu hodnotu - vratime undefined
+        if (day && month && year) {
+            let monthStr: string = month.toString();
+            if (monthStr.length < 2) {
+                monthStr = "0" + monthStr;
+            }
+            let dayStr: string = day.toString();
+            if (dayStr.length < 2) {
+                dayStr = "0" + dayStr;
+            }
+            valueDate = new Date(`${year}-${monthStr}-${dayStr}`);
+            if (isNaN(valueDate as any)) {
+                // ak je nekorektny datum (napr. 2024-13-01)
+                valueDate = undefined;
+            }
+        }
+    }
+    return valueDate;
+}
+
 
 export function dateAsUI(value: Date | null): string {
     if (value !== null) {

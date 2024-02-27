@@ -168,6 +168,17 @@ export class XUtilsCommon {
     static sqlMaxDateIfNull(sqlExp: string): string {
         return `coalesce(${sqlExp}, '9999-12-31'::DATE)`;
     }
+
+    static today(): Date {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return today;
+    }
+
+    // vrati true ak sa string sklada iba z cislic, moze mat + alebo - na zaciatku
+    static isInt(stringValue: string): boolean {
+        return /^[-+]?\d+$/.test(stringValue);
+    }
 }
 
 // nevedel som importnut dateFormat, tak som to dal sem aby som nemusel vsade pouzivat require("dateformat")
