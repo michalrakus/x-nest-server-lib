@@ -234,7 +234,7 @@ export abstract class XQueryData {
         this.params = {...this.params, ...params};
     }
 
-    addFtsField(ftsField: string) {
+    addFtsField(prefix: string | null, ftsField: string) {
         const xField: XField = this.xEntityMetadataService.getXFieldByPath(this.xEntity, ftsField);
         let dbCast: string;
         if (xField.type === "boolean") {
@@ -246,22 +246,25 @@ export abstract class XQueryData {
         }
         const dbField: string = this.getFieldFromPathField(ftsField);
         // TODO - konverzie
+        // prefix (napr. RC pre rodne cislo) nam umoznuje zafixovat nejaku hodnotu vo vyhladavacom retazci na konkretny stlpec
+        // napr. ak zadame RC801207, bude sa retazec 801207 hladat len medzi hodnotami zo stlpca rodne cislo
+        const dbPrefix: string = prefix ? `'${prefix}' || ` : ``;
         // ak dbField castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
-        this.ftsFieldList.push(`coalesce((${dbField})${dbCast}, '')`);
+        this.ftsFieldList.push(`coalesce(${dbPrefix}(${dbField})${dbCast}, '')`);
     }
 
     // pouzivam ako separator namiesto space-u (' ') lebo space sa moze nachadzat v hodnotach
     // otazne je ci je to vhodna volba pri pouziti GIN indexu
     static xFtsSeparator: string = '|';
 
-    createFtsWhereItemForQuery(ftsValue: string): string | "" {
+    createFtsWhereItemForQuery(ftsValue: string, ftsSeparator: string): string | "" {
         let whereItem: string | "" = "";
         if (this.ftsFieldList.length > 0) {
             // na zaciatok a na koniec pridavame separator '|', vyuzijeme ich ak bude operator startsWith/endsWidth/equals
             // ILIKE - I = insensitive case
             // <schema>.unaccent - odstranuje diakritiku - neviem ci je lepsie ju volat raz alebo radsej pre kazdy field zvlast
             const ftsValueDB: string = stringAsDB(`%${ftsValue}%`);
-            whereItem = `${XUtils.getSchema()}.unaccent('${XQueryData.xFtsSeparator}' || ${this.ftsFieldList.join(` || '${XQueryData.xFtsSeparator}' || `)} || '${XQueryData.xFtsSeparator}') ILIKE ${XUtils.getSchema()}.unaccent(${ftsValueDB})`;
+            whereItem = `${XUtils.getSchema()}.unaccent('${ftsSeparator}' || ${this.ftsFieldList.join(` || '${ftsSeparator}' || `)} || '${ftsSeparator}') ILIKE ${XUtils.getSchema()}.unaccent(${ftsValueDB})`;
         }
         return whereItem;
     }

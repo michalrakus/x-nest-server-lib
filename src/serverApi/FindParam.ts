@@ -19,6 +19,7 @@ import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
 
 export enum ResultType {
     OnlyRowCount,
+    OnlyPagedRows,
     RowCountAndPagedRows,
     AllRows
 }
@@ -37,7 +38,8 @@ export type XCustomFilter = XCustomFilterItem | XCustomFilterItem[];
 
 export interface XFullTextSearch {
     fields?: string[]; // stlpce na ktorych sa vykona search, ak undefined, tak sa pouziju FindParam.fields
-    value: string; // hodnoty oddelene space-om, rozdelia sa a budu vo where podmienke pouzite cez AND
+    value: string; // hodnoty oddelene space-om, rozdelia sa a budu vo where podmienke pouzite cez AND (ak nie je splitValue = false)
+    splitValue: boolean; // ci rozdelit "value" by space (default true)
     matchMode: 'startsWith' | 'contains' | 'endsWith' | 'equals'; // zatial tieto (podmnozina z DataTableFilterMetaData), default bude 'contains'
 }
 
@@ -70,9 +72,7 @@ export interface FindParam {
 // taky jednoduchsi FindParam
 export interface XLazyAutoCompleteSuggestionsRequest {
     maxRows: number;
-    field: string;
-    queryValue: string; // string from autocomplete input
-    splitQueryValue: boolean;
+    fullTextSearch?: XFullTextSearch;
     entity: string;
     filterItems?: XCustomFilterItem[];
     multiSortMeta?: DataTableSortMeta[]; // typ []

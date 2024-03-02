@@ -117,13 +117,13 @@ export class XLazyDataTableService {
         }
 
         let rowList: any[];
-        if (findParam.resultType === ResultType.RowCountAndPagedRows || findParam.resultType === ResultType.AllRows) {
+        if (findParam.resultType === ResultType.OnlyPagedRows || findParam.resultType === ResultType.RowCountAndPagedRows || findParam.resultType === ResultType.AllRows) {
             xMainQueryData.addSelectItems(findParam.fields);
             xMainQueryData.addOrderByItems(findParam.multiSortMeta);
 
             const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderFromXMainQuery(xMainQueryData);
 
-            if (findParam.resultType === ResultType.RowCountAndPagedRows) {
+            if (findParam.resultType === ResultType.OnlyPagedRows || findParam.resultType === ResultType.RowCountAndPagedRows) {
                 selectQueryBuilder.skip(findParam.first);
                 selectQueryBuilder.take(findParam.rows);
             }
@@ -408,35 +408,35 @@ export class XLazyDataTableService {
 
     async lazyAutoCompleteSuggestions(suggestionsRequest: XLazyAutoCompleteSuggestionsRequest): Promise<FindResult> {
 
-        let filterItems: XCustomFilterItem[] = [];
-        if (suggestionsRequest.filterItems) {
-            filterItems.push(...suggestionsRequest.filterItems);
-        }
-        const queryValueFromParam: string = suggestionsRequest.queryValue.trim();
-        if (queryValueFromParam.length) {
-            // uzivatel nieco natypoval
-            // ak mame viac hodnot oddelenych space-om, tak kazda hodnota sa musi vyskytovat zvlast
-            // (podobny princip ako pri full text search - XMainQueryData.createFtsWhereItem)
-            let queryValueList: string[];
-            if (suggestionsRequest.splitQueryValue) {
-                queryValueList = queryValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
-            }
-            else {
-                queryValueList = [queryValueFromParam]; // nesplitujeme
-            }
-            for (const queryValue of queryValueList) {
-                // TODO - upravit aby fungovalo aj pre ne-string hodnoty
-                const queryValueDB: string = stringAsDB(`%${queryValue}%`);
-                filterItems.push({where: `${XUtils.getSchema()}.unaccent([${suggestionsRequest.field}]) ILIKE ${XUtils.getSchema()}.unaccent(${queryValueDB})`, params: {}});
-            }
-        }
-        const findParamCount: FindParam = {resultType: ResultType.OnlyRowCount, entity: suggestionsRequest.entity, customFilterItems: filterItems};
+        const findParamRows: FindParam = {
+            resultType: ResultType.OnlyPagedRows,
+            first: 0,
+            rows: suggestionsRequest.maxRows,
+            entity: suggestionsRequest.entity,
+            fullTextSearch: suggestionsRequest.fullTextSearch,
+            customFilterItems: suggestionsRequest.filterItems,
+            multiSortMeta: suggestionsRequest.multiSortMeta,
+            fields: suggestionsRequest.fields
+        };
+        return await this.findRows(findParamRows);
+    }
+
+/*  stary nepouzivany sposob - ma vzdy 2 drahe selecty (cca 200 ms na tabulke klientov kazdy select):
+    async lazyAutoCompleteSuggestionsOld(suggestionsRequest: XLazyAutoCompleteSuggestionsRequest): Promise<FindResult> {
+
+        const findParamCount: FindParam = {
+            resultType: ResultType.OnlyRowCount,
+            entity: suggestionsRequest.entity,
+            fullTextSearch: suggestionsRequest.fullTextSearch,
+            customFilterItems: suggestionsRequest.filterItems
+        };
         let findResult: FindResult = await this.findRows(findParamCount);
         if (findResult.totalRecords <= suggestionsRequest.maxRows) {
             const findParamRows: FindParam = {
                 resultType: ResultType.AllRows,
                 entity: suggestionsRequest.entity,
-                customFilterItems: filterItems,
+                fullTextSearch: suggestionsRequest.fullTextSearch,
+                customFilterItems: suggestionsRequest.filterItems,
                 multiSortMeta: suggestionsRequest.multiSortMeta,
                 fields: suggestionsRequest.fields
             };
@@ -444,7 +444,7 @@ export class XLazyDataTableService {
         }
         return findResult;
     }
-
+*/
     // ************** stary nepouzivany export ******************
 /*
     private async exportCsv(exportParam: ExportParam, res: Response) {

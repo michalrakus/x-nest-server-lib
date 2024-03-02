@@ -117,6 +117,18 @@ export class XUtilsCommon {
         return path.indexOf(".") === -1;
     }
 
+    static getPrefixAndField(path: string): [string | null, string] {
+        const posDot: number = path.indexOf(":");
+        if (posDot === -1) {
+            return [null, path];
+        }
+        else {
+            const prefix = path.substring(0, posDot);
+            const pathOnly = path.substring(posDot + 1);
+            return [prefix, pathOnly];
+        }
+    }
+
     static objectAsJSON(value: any): string {
 
         // sem treba dat nejaku pre nas vhodnu serializaciu

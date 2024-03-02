@@ -52,8 +52,9 @@ export class XMainQueryData extends XQueryData {
             const fields: string[] = this.fullTextSearch.fields;
             if (fields) {
                 for (const field of fields) {
-                    const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(field);
-                    xQueryData.addFtsField(filterFieldNew);
+                    const [prefix, fieldOnly]: [string | null, string] = XUtilsCommon.getPrefixAndField(field);
+                    const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(fieldOnly);
+                    xQueryData.addFtsField(prefix, filterFieldNew);
                 }
             }
         }
@@ -164,18 +165,26 @@ export class XMainQueryData extends XQueryData {
         if (this.fullTextSearch) {
             const ftsValueFromParam: string = this.fullTextSearch.value;
             let ftsValueList: string[];
-            if (ftsValueFromParam.trim() === '') {
-                ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
+            let ftsSeparator: string;
+            if (this.fullTextSearch.splitValue) {
+                if (ftsValueFromParam.trim() === '') {
+                    ftsValueList = [ftsValueFromParam]; // podporujeme aj hladanie napr. troch medzier '   ' - chceme to?
+                }
+                else {
+                    ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
+                }
+                ftsSeparator = XQueryData.xFtsSeparator; // separator | - hlavne koli pripadnym startsWith, startsEnd, equals operatorom
             }
             else {
-                ftsValueList = ftsValueFromParam.split(' ').filter((value: string) => value !== ''); // nechceme pripadne prazdne retazce ''
+                ftsValueList = [ftsValueFromParam]; // no split by space
+                ftsSeparator = " "; // ak by sme medzi stlpcami nepouzili space, tak by pri zadani dvoch a viac hodnot netrafilo hodnotu vytvorenu z dvoch (a viac) stlpcov
             }
             for (const ftsValue of ftsValueList) {
                 // vezmeme podmienku z main query
-                let ftsWhereForValue: string | "" = this.createFtsWhereItemForQuery(ftsValue);
+                let ftsWhereForValue: string | "" = this.createFtsWhereItemForQuery(ftsValue, ftsSeparator);
                 // vezmeme podmienky zo subqueries
                 for (const [assocOneToMany, xSubQueryData] of this.assocXSubQueryDataMap.entries()) {
-                    ftsWhereForValue = XQueryData.whereItemOr(ftsWhereForValue, xSubQueryData.createFtsWhereItemForSubQuery(mainQueryBuilderForExistsSubQueries, ftsValue));
+                    ftsWhereForValue = XQueryData.whereItemOr(ftsWhereForValue, xSubQueryData.createFtsWhereItemForSubQuery(mainQueryBuilderForExistsSubQueries, ftsValue, ftsSeparator));
                 }
                 if (ftsWhereForValue !== "") {
                     ftsWhereForValue = `(${ftsWhereForValue})`; // pripadne OR-y uzatvorkujeme

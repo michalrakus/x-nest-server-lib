@@ -37,7 +37,7 @@ export class XSubQueryData extends XQueryData {
         return selectSubQueryBuilder;
     }
 
-    createQueryBuilderForFts(selectQueryBuilder: SelectQueryBuilder<unknown>, selection: string, ftsValue: string): SelectQueryBuilder<unknown> | undefined {
+    createQueryBuilderForFts(selectQueryBuilder: SelectQueryBuilder<unknown>, selection: string, ftsValue: string, ftsSeparator: string): SelectQueryBuilder<unknown> | undefined {
         let selectSubQueryBuilder: SelectQueryBuilder<unknown> | undefined = undefined;
         if (this.ftsFieldList.length > 0) {
             selectSubQueryBuilder = selectQueryBuilder.subQuery();
@@ -50,22 +50,22 @@ export class XSubQueryData extends XQueryData {
             // if (this.where !== "") {
             //     selectSubQueryBuilder.andWhere(this.where, this.params);
             // }
-            selectSubQueryBuilder.andWhere(this.createFtsWhereItemForQuery(ftsValue), {});
+            selectSubQueryBuilder.andWhere(this.createFtsWhereItemForQuery(ftsValue, ftsSeparator), {});
         }
         return selectSubQueryBuilder;
     }
 
-    createFtsWhereItemForSubQuery(mainQueryBuilderForExistsSubQueries: SelectQueryBuilder<unknown> | undefined, ftsValue: string): string | "" {
+    createFtsWhereItemForSubQuery(mainQueryBuilderForExistsSubQueries: SelectQueryBuilder<unknown> | undefined, ftsValue: string, ftsSeparator: string): string | "" {
         let where: string | "" = "";
         if (mainQueryBuilderForExistsSubQueries) {
             // pridame podmienku EXISTS (subquery)
-            const selectSubQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderForFts(mainQueryBuilderForExistsSubQueries, `1`, ftsValue);
+            const selectSubQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderForFts(mainQueryBuilderForExistsSubQueries, `1`, ftsValue, ftsSeparator);
             if (selectSubQueryBuilder) {
                 where = `EXISTS (${selectSubQueryBuilder.getQuery()})`;
             }
         }
         else {
-            where = this.createFtsWhereItemForQuery(ftsValue);
+            where = this.createFtsWhereItemForQuery(ftsValue, ftsSeparator);
         }
         return where;
     }
