@@ -260,7 +260,8 @@ export function booleanAsUIText(value: boolean | null): string {
 
 export enum AsUIType {
     Form = 1, // formulare - boolean sa ponecha, neskor sa konvertuje na Checkbox
-    Text = 2  // reporty - boolean sa konvertuje na ano/nie
+    Text = 2,  // reporty - boolean sa konvertuje na ano/nie
+    Excel = 3  // excel - nie vsetko konvertujeme do string-u, vecsinou zostavame pri typoch number, Date
 }
 
 /**
@@ -304,23 +305,27 @@ export function convertObject(entity: string, object: any, fromModel: boolean, a
 }
 
 export function convertValue(xField: XField, value: any, fromModel: boolean, asUI: AsUIType | undefined): any {
-    if (xField.type === "decimal") {
+    return convertValueBase(xField.type, xField.scale, value, fromModel, asUI);
+}
+
+export function convertValueBase(fieldType: string, fractionDigits: number | undefined, value: any, fromModel: boolean, asUI: AsUIType | undefined): any {
+    if (fieldType === "decimal") {
         if (fromModel) {
             value = numberFromModel(value);
         }
-        if (asUI) {
-            value = numberAsUI(value, xField.scale);
+        if (asUI && asUI !== AsUIType.Excel) {
+            value = numberAsUI(value, fractionDigits);
         }
     }
-    else if (xField.type === "date") {
+    else if (fieldType === "date") {
         if (fromModel) {
             value = dateFromModel(value);
         }
-        if (asUI) {
+        if (asUI && asUI !== AsUIType.Excel) {
             value = dateAsUI(value);
         }
     }
-    else if (xField.type === "datetime") {
+    else if (fieldType === "datetime") {
         if (fromModel) {
             value = dateFromModel(value);
         }
@@ -328,22 +333,22 @@ export function convertValue(xField: XField, value: any, fromModel: boolean, asU
             value = datetimeAsUI(value);
         }
     }
-    else if (xField.type === "interval") {
+    else if (fieldType === "interval") {
         // konverziu z modelu (json objekt-u) netreba
         if (asUI) {
             value = intervalAsUI(value);
         }
     }
-    else if (xField.type === "boolean") {
+    else if (fieldType === "boolean") {
         // konverziu z modelu (json objekt-u) netreba
         // pre AsUIType.Form ponechame typ boolean (spracujeme neskor)
-        if (asUI === AsUIType.Text) {
+        if (asUI === AsUIType.Text || asUI === AsUIType.Excel) {
             value = booleanAsUIText(value);
         }
     }
     else {
         // vsetko ostatne
-        if (asUI) {
+        if (asUI && asUI !== AsUIType.Excel) {
             value = value ? value.toString() : "";
         }
     }

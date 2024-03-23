@@ -8,7 +8,7 @@ import {
 import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XAssoc, XAssocMap, XEntity} from "../serverApi/XEntityMetadata";
-import {XUser} from "../administration/xuser.entity";
+import {XUser} from "../administration/x-user.entity";
 import {XUserAuthenticationRequest, XUserAuthenticationResponse} from "../serverApi/XUserAuthenticationIfc";
 import {XUtils} from "./XUtils";
 import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
@@ -21,6 +21,8 @@ import {XEnvVar} from "./XEnvVars";
 import {join} from "path";
 import {unlinkSync} from "fs";
 import {XRowIdListToRemove} from "./XRowIdListToRemove";
+import {XParam} from "../administration/x-param.entity";
+import {dateFromUI, intFromUI, numberFromModel} from "../serverApi/XUtilsConversions";
 
 @Injectable()
 export class XLibService {
@@ -474,5 +476,45 @@ export class XLibService {
         //     }
         // }
         return {xUser: xUser !== null ? xUser : undefined};
+    }
+
+    // helper functions - maybe better XUtilsService
+
+    async getSequenceValue(sequenceName: string): Promise<number> {
+        const rowList: any[] = await this.dataSource.query(`SELECT nextval('${XUtils.getSchema()}.${sequenceName}') AS value`);
+        return numberFromModel(rowList[0].value);
+    }
+
+    async setSequenceValue(sequenceName: string, value: number): Promise<void> {
+        await this.dataSource.query(`SELECT setval('${XUtils.getSchema()}.${sequenceName}', ${value}, false)`);
+    }
+
+    async getParamValueAsInt(paramCode: string): Promise<number> {
+        const paramValue: string = await this.getParamValue(paramCode);
+        const paramValueInt: number | null | undefined = intFromUI(paramValue);
+        if (paramValueInt === null || paramValueInt === undefined) {
+            throw `Param ${paramCode}: could not convert param value ${paramValue} to int.`;
+        }
+        return paramValueInt;
+    }
+
+    async getParamValueAsDate(paramCode: string): Promise<Date> {
+        const paramValue: string = await this.getParamValue(paramCode);
+        const paramValueDate: Date | null | undefined = dateFromUI(paramValue);
+        if (paramValueDate === null || paramValueDate === undefined) {
+            throw `Param ${paramCode}: could not convert param value ${paramValue} to date.`;
+        }
+        return paramValueDate;
+    }
+
+    async getParamValue(paramCode: string): Promise<string> {
+        const repository = this.dataSource.getRepository(XParam);
+        const sqb: SelectQueryBuilder<XParam> = repository.createQueryBuilder("xParam");
+        sqb.where("xParam.code = :code", {code: paramCode});
+        const xParam: XParam | null = await sqb.getOne();
+        if (xParam === null) {
+            throw `XParam row for code = ${paramCode} not found.`;
+        }
+        return xParam.value;
     }
 }

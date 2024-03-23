@@ -157,6 +157,18 @@ export class XUtilsCommon {
         return json;
     }
 
+    static arrayCreateMap<ID, T>(array: T[], idField: string): Map<ID, T> {
+
+        const idRowMap: Map<ID, T> = new Map<ID, T>();
+        for (const row of array) {
+            if (row) {
+                idRowMap.set((row as any)[idField], row);
+            }
+        }
+
+        return idRowMap;
+    }
+
     static getDayName(date: Date | null | undefined): string | undefined {
         const days = ['nedeľa', 'pondelok', 'utorok', 'streda', 'štvrtok', 'piatok', 'sobota'];
         return date ? days[date.getDay()] : undefined;
@@ -183,7 +195,12 @@ export class XUtilsCommon {
 
     static today(): Date {
         const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // vynulujeme casovu zlozku
+        // poznamka: Date vzdy obsahuje aj casovu zlozku. Nase konverzne funkcie dateFromModel a dateFromUI pouzivaju konverziu new Date('YYYY-MM-DD')
+        // a tato konverzia vytvara datum s GMT/UTC/Z casom 00:00:00 (stredoeuropsky 00:01:00 - akokeby sme zadavali new Date('YYYY-MM-DDT00:00:00Z'))
+        //today.setHours(0, 0, 0, 0); // nastavi cas 00:00:00 v aktualnej timezone (stredoeuropsky 00:00:00, GMT 23:00:00)
+        // - potom nam nefunguje porovnavanie s datumami vytvorenymi cez funkcie dateFromModel a dateFromUI
+        today.setUTCHours(0, 0, 0, 0);
         return today;
     }
 

@@ -19,9 +19,10 @@ import {RemoveRowParam} from "./RemoveRowParam";
 import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 import {Response} from 'express';
-import {ExportParam, LazyDataTableQueryParam} from "../serverApi/ExportImportParam";
+import {ExportParam} from "../serverApi/ExportImportParam";
 import {FindParamRows} from "./FindParamRows";
 import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
+import {XGetSequenceValueRequest, XGetSequenceValueResponse} from "../serverApi/x-lib-api";
 
 @Controller()
 export class XLibController {
@@ -119,6 +120,18 @@ export class XLibController {
     @Post('userSaveRow')
     async userSaveRow(@Body() body: SaveRowParam) {
         await this.xLibService.userSaveRow(body);
+    }
+
+    // helper functions - maybe better XUtilsController
+
+    @Post('x-get-sequence-value')
+    async getSequenceValue(@Body() xGetSequenceValueRequest: XGetSequenceValueRequest): Promise<XGetSequenceValueResponse> {
+        return {value: await this.xLibService.getSequenceValue(xGetSequenceValueRequest.name)};
+    }
+
+    @Post('x-get-param-value')
+    async getParamValue(@Body() request: {code: string;}): Promise<{value: string;}> {
+        return {value: await this.xLibService.getParamValue(request.code)};
     }
 
     @Post('getXEntityMap')

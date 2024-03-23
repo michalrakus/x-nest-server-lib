@@ -42,6 +42,23 @@ export class XUtilsMetadataCommon {
         return xField;
     }
 
+    static getXFieldByPathBase(xEntity: XEntity, path: string): XField | undefined {
+        const [field, restPath] = XUtilsCommon.getFieldAndRestPath(path);
+        if (restPath === null) {
+            return XUtilsMetadataCommon.getXFieldBase(xEntity, field);
+        }
+        else {
+            const xAssoc: XAssoc | undefined = XUtilsMetadataCommon.getXAssocBase(xEntity, field);
+            if (xAssoc) {
+                const xAssocEntity = XUtilsMetadataCommon.getXEntity(xAssoc.entityName);
+                return XUtilsMetadataCommon.getXFieldByPathBase(xAssocEntity, restPath);
+            }
+            else {
+                return undefined;
+            }
+        }
+    }
+
     static getXFieldByPath(xEntity: XEntity, path: string): XField {
         const [field, restPath] = XUtilsCommon.getFieldAndRestPath(path);
         if (restPath === null) {
