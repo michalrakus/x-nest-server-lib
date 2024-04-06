@@ -4,7 +4,6 @@ import {DataSource, SelectQueryBuilder} from "typeorm";
 import {
     FindParam,
     ResultType,
-    XCustomFilterItem,
     XFullTextSearch,
     XLazyAutoCompleteSuggestionsRequest
 } from "../serverApi/FindParam";
@@ -20,8 +19,6 @@ import {XMainQueryData} from "../x-query-data/XMainQueryData";
 import {XQueryData} from "../x-query-data/XQueryData";
 import {XSubQueryData} from "../x-query-data/XSubQueryData";
 import {XCsvWriter, XExportService} from "./x-export.service";
-import {XUtils} from "./XUtils";
-import {stringAsDB} from "../serverApi/XUtilsConversions";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -237,7 +234,7 @@ export class XLazyDataTableService {
         const xFieldList: XField[] = this.createXFieldList(queryParam);
 
         for (const row of rowList) {
-            this.writeObjectRowToCsv(row, queryParam.fields, xEntity, xFieldList, xCsvWriter);
+            this.writeObjectRowToCsv(row, queryParam.fields, queryParam.fieldsToDuplicateValues, xEntity, xFieldList, xCsvWriter);
         }
 
         xCsvWriter.end();
@@ -255,7 +252,7 @@ export class XLazyDataTableService {
         xCsvWriter.writeRow(...csvValues);
     }
 
-    private writeObjectRowToCsv(entityObj: any, fields: string[], xEntity: XEntity, xFieldList: XField[], xCsvWriter: XCsvWriter) {
+    private writeObjectRowToCsv(entityObj: any, fields: string[], fieldsToDuplicateValues: string[] | undefined, xEntity: XEntity, xFieldList: XField[], xCsvWriter: XCsvWriter) {
         // vytvarany csv row je tvoreny stlpcami - standardne ma stlpec presne 1 hodnotu,
         // ak sa vsak jedna o field dotahovany cez one-to-many asociaciu, ma dany stlpec vsetky hodnoty dotiahnute cez danu asociaciu (moze byt aj 0 hodnot)
         // dlzku najdlhsieho stlpca si zapiseme do "maxColumnIndex"
@@ -298,7 +295,17 @@ export class XLazyDataTableService {
                     csvValue = columnValues[rowIndex];
                 }
                 else {
-                    csvValue = ""; // prazdna bunka
+                    csvValue = ""; // prazdna bunka (default)
+
+                    // ak mame zadane stlpce, v ktorych chceme duplikovat hodnoty, tak zduplikujeme hodnotu z prveho riadku (master zaznam)
+                    // (nemalo by sa jednat o toMany stlpce)
+                    if (fieldsToDuplicateValues) {
+                        if (fieldsToDuplicateValues.includes(fields[index])) {
+                            if (columnValues.length > 0) {
+                                csvValue = columnValues[0];
+                            }
+                        }
+                    }
                 }
                 csvValues[index] = csvValue;
             }

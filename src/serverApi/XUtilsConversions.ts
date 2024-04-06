@@ -349,7 +349,7 @@ export function convertValueBase(fieldType: string, fractionDigits: number | und
     else {
         // vsetko ostatne
         if (asUI && asUI !== AsUIType.Excel) {
-            value = value ? value.toString() : "";
+            value = (value !== null && value !== undefined) ? value.toString() : "";
         }
     }
     return value;

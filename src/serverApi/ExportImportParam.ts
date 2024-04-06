@@ -21,6 +21,7 @@ export interface LazyDataTableQueryParam {
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields: string[];
+    fieldsToDuplicateValues?: string[];
 }
 
 // vo windowse zavisi od regionalnych nastaveni, default nastavenie je ";" a preto vecsinou aj excel produkuje csv s ";" (menej sa to bije s decimalmi)

@@ -129,6 +129,28 @@ export class XUtilsCommon {
         }
     }
 
+    static createDisplayValue(object: any, fields: string[]): string {
+        let displayValue: string = "";
+        for (const field of fields) {
+            // TODO - konverzie na spravny typ/string
+            const [prefix, fieldOnly]: [string | null, string] = XUtilsCommon.getPrefixAndField(field);
+            const value: any = XUtilsCommon.getValueByPath(object, fieldOnly);
+            if (value !== null && value !== undefined) {
+                const valueStr: string = value.toString(); // TODO - spravnu konverziu
+                if (valueStr !== "") {
+                    if (displayValue !== "") {
+                        displayValue += " ";
+                    }
+                    if (prefix) {
+                        displayValue += prefix;
+                    }
+                    displayValue += valueStr;
+                }
+            }
+        }
+        return displayValue;
+    }
+
     static objectAsJSON(value: any): string {
 
         // sem treba dat nejaku pre nas vhodnu serializaciu
@@ -181,6 +203,52 @@ export class XUtilsCommon {
             result.setDate(result.getDate() + days);
         }
         return result;
+    }
+
+    static dateAddMonths(date: Date | null, months: number): Date | null {
+        let result = null;
+        if (date !== null) {
+            result = new Date(date);
+            result.setMonth(result.getMonth() + months);
+        }
+        return result;
+    }
+
+    // helper method, because date1 === date2 compares pointers, not values (Date is not primitive type like string or number)
+    static dateEquals(date1: Date | null, date2: Date | null): boolean {
+        let result: boolean = false;
+        if (date1 === null && date2 === null) {
+            result = true;
+        }
+        else if (date1 !== null && date2 !== null) {
+            result = (date1.getTime() === date2.getTime());
+        }
+        return result;
+    }
+
+    // solution from internet
+    static dateDiffInYears(dateOld: Date | null, dateNew: Date | null): number | null {
+        let diff: number | null = null;
+        if (dateOld !== null && dateNew !== null) {
+            const yearNew: number = dateNew.getFullYear();
+            const monthNew: number = dateNew.getMonth();
+            const dayNew: number = dateNew.getDate();
+            const yearOld: number = dateOld.getFullYear();
+            const monthOld: number = dateOld.getMonth();
+            const dayOld: number = dateOld.getDate();
+            diff = yearNew - yearOld;
+            if (monthOld > monthNew) {
+                diff--;
+            }
+            else {
+                if (monthOld === monthNew) {
+                    if (dayOld > dayNew) {
+                        diff--;
+                    }
+                }
+            }
+        }
+        return diff;
     }
 
     static findFirstMatch(pattern: RegExp, value: string): string | null {
