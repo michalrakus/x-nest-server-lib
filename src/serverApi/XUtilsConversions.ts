@@ -67,6 +67,23 @@ export function numberFromModel(value: any): number | null {
     return numberValue;
 }
 
+// konvertuje hodnotu napr. 12.34
+export function numberFromString(valueString: string): number | null {
+    let numberValue: number | null = parseFloat(valueString);
+    if (isNaN(numberValue)) {
+        numberValue = null;
+    }
+    return numberValue;
+}
+
+// upresnenie typu datumu - pouzivame typ number, lebo zneuzivame atribut scale v TypeORM na zadanie upresnenia
+export enum XDateScale {
+    Date = 1, // dd.mm.yyyy (default)
+    Month = 2, // mm.yyyy
+    Year = 3 // yyyy
+}
+//export type XDateType = "month" | "year" | "date";
+
 // v modeli na klientovi by mal byt vzdy Date, teraz je tam niekedy string (z json-u zo servera) a niekedy Date (z komponentu)
 // provizorne zatial takato konverzia
 export function dateFromModel(value: any): Date | null {
@@ -80,9 +97,9 @@ export function dateFromModel(value: any): Date | null {
     return dateValue;
 }
 
-export function dateFromUI(valueString: string): Date | null | undefined {
+export function dateFromUI(valueString: string, dateScale: XDateScale = XDateScale.Date): Date | null | undefined {
     // converts valueString (e.g. 21.2.2024) into Date
-    // if stringValue is invalid, returns undefined
+    // if valueString is invalid, returns undefined
     let valueDate: Date | null | undefined = undefined;
     if (valueString === '') {
         valueDate = null;
@@ -93,21 +110,45 @@ export function dateFromUI(valueString: string): Date | null | undefined {
         let month: number | null | undefined = null;
         let year: number | null | undefined = null;
 
-        const posDot = valueString.indexOf('.');
-        if (posDot === -1) {
-            day = intFromUI(valueString);
-        }
-        else {
-            day = intFromUI(valueString.substring(0, posDot));
-            const rest: string = valueString.substring(posDot + 1);
-            const posDot2 = rest.indexOf('.');
-            if (posDot2 === -1) {
-                month = intFromUI(rest);
+        if (dateScale === XDateScale.Date) {
+            // format "dd.mm.yyyy"
+            const posDot = valueString.indexOf('.');
+            if (posDot === -1) {
+                day = intFromUI(valueString);
             }
             else {
-                month = intFromUI(rest.substring(0, posDot2));
-                year = intFromUI(rest.substring(posDot2 + 1));
+                day = intFromUI(valueString.substring(0, posDot));
+                const rest: string = valueString.substring(posDot + 1);
+                const posDot2 = rest.indexOf('.');
+                if (posDot2 === -1) {
+                    month = intFromUI(rest);
+                }
+                else {
+                    month = intFromUI(rest.substring(0, posDot2));
+                    year = intFromUI(rest.substring(posDot2 + 1));
+                }
             }
+        }
+        else if (dateScale === XDateScale.Month) {
+            // format "mm.yyyy"
+            day = 1;
+            const posDot = valueString.indexOf('.');
+            if (posDot === -1) {
+                month = intFromUI(valueString);
+            }
+            else {
+                month = intFromUI(valueString.substring(0, posDot));
+                year = intFromUI(valueString.substring(posDot + 1));
+            }
+        }
+        else if (dateScale === XDateScale.Year) {
+            // format "yyyy"
+            day = 1;
+            month = 1;
+            year = intFromUI(valueString);
+        }
+        else {
+            throw "Unimplemented dateScale = " + dateScale;
         }
 
         // doplnime mesiac a rok ak uzivatel nezadal (ak mame undefined, tak umyselne nedoplname)
@@ -139,9 +180,9 @@ export function dateFromUI(valueString: string): Date | null | undefined {
 }
 
 
-export function dateAsUI(value: Date | null): string {
+export function dateAsUI(value: Date | null, dateScale: XDateScale = XDateScale.Date): string {
     if (value !== null) {
-        return dateFormat(value, dateFormatUI());
+        return dateFormat(value, dateFormatUI(dateScale));
     }
     else {
         return "";
@@ -184,12 +225,38 @@ export function timeFromModel(value: any): Date | null {
     return timeValue;
 }
 
-export function dateFormatUI(): string {
-    return "dd.mm.yyyy";
+export function dateFormatUI(dateScale: XDateScale = XDateScale.Date): string {
+    let format: string;
+    if (dateScale === XDateScale.Date) {
+        format = "dd.mm.yyyy";
+    }
+    else if (dateScale === XDateScale.Month) {
+        format = "mm.yyyy";
+    }
+    else if (dateScale === XDateScale.Year) {
+        format = "yyyy";
+    }
+    else {
+        throw "Unimplemented dateScale = " + dateScale;
+    }
+    return format;
 }
 
-export function dateFormatCalendar(): string {
-    return "dd.mm.yy";
+export function dateFormatCalendar(dateScale: XDateScale = XDateScale.Date): string {
+    let format: string;
+    if (dateScale === XDateScale.Date) {
+        format = "dd.mm.yy";
+    }
+    else if (dateScale === XDateScale.Month) {
+        format = "mm.yy";
+    }
+    else if (dateScale === XDateScale.Year) {
+        format = "yy";
+    }
+    else {
+        throw "Unimplemented dateScale = " + dateScale;
+    }
+    return format;
 }
 
 export function datetimeFormatUI(): string {
@@ -308,21 +375,21 @@ export function convertValue(xField: XField, value: any, fromModel: boolean, asU
     return convertValueBase(xField.type, xField.scale, value, fromModel, asUI);
 }
 
-export function convertValueBase(fieldType: string, fractionDigits: number | undefined, value: any, fromModel: boolean, asUI: AsUIType | undefined): any {
+export function convertValueBase(fieldType: string, scale: number | undefined, value: any, fromModel: boolean, asUI: AsUIType | undefined): any {
     if (fieldType === "decimal") {
         if (fromModel) {
             value = numberFromModel(value);
         }
         if (asUI && asUI !== AsUIType.Excel) {
-            value = numberAsUI(value, fractionDigits);
+            value = numberAsUI(value, scale);
         }
     }
     else if (fieldType === "date") {
         if (fromModel) {
             value = dateFromModel(value);
         }
-        if (asUI && asUI !== AsUIType.Excel) {
-            value = dateAsUI(value);
+        if (asUI && (asUI !== AsUIType.Excel || scale === XDateScale.Month || scale === XDateScale.Year)) {
+            value = dateAsUI(value, scale);
         }
     }
     else if (fieldType === "datetime") {

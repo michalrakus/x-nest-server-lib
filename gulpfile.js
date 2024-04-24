@@ -31,6 +31,8 @@ function generateApi(cb) {
         //"./lib/services/x-entity-metadata.service",
         "./lib/services/x-exception.filter",
         "./lib/services/x-export.service",
+        "./lib/services/x-export-csv.service",
+        "./lib/services/x-export-excel.service",
         //"./lib/services/x-lazy-data-table.service",
         "./lib/services/x-lib.service",
         //"./lib/services/x-lib.controller",

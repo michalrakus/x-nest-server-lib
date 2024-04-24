@@ -3,14 +3,13 @@ import {
     Request,
     Controller,
     Post,
-    Res
+    Res, StreamableFile
 } from '@nestjs/common';
 import {XLibService} from "./x-lib.service";
 import {FindResult} from "../serverApi/FindResult";
 import {XLazyDataTableService} from "./x-lazy-data-table.service";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XEntityMap} from "../serverApi/XEntityMetadata";
-import {XUserAuthenticationRequest, XUserAuthenticationResponse} from "../serverApi/XUserAuthenticationIfc";
 import {FindParam, XLazyAutoCompleteSuggestionsRequest} from "../serverApi/FindParam";
 import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
 import {FindRowByIdParam} from "./FindRowByIdParam";
@@ -19,7 +18,7 @@ import {RemoveRowParam} from "./RemoveRowParam";
 import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 import {Response} from 'express';
-import {ExportParam} from "../serverApi/ExportImportParam";
+import {ExportCsvParam, ExportExcelParam, ExportJsonParam} from "../serverApi/ExportImportParam";
 import {FindParamRows} from "./FindParamRows";
 import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
 import {XGetSequenceValueRequest, XGetSequenceValueResponse} from "../serverApi/x-lib-api";
@@ -38,8 +37,14 @@ export class XLibController {
         return findResult;
     }
 
-    @Post('x-lazy-data-table-export')
-    async lazyDataTableExport(@Body() body: ExportParam, @Res() res: Response) {
+    @Post('x-lazy-data-table-export-excel')
+    async lazyDataTableExportExcel(@Body() body: ExportExcelParam): Promise<StreamableFile> {
+        // pri exceli zatial nepouzivame stream-y, mozno v buducnosti dorobime (lib-ka exceljs stream-y podporuje)
+        return await this.xLazyDataTableService.exportExcel(body);
+    }
+
+    @Post('x-lazy-data-table-export-csv')
+    async lazyDataTableExportCsv(@Body() body: ExportCsvParam, @Res() res: Response) {
         // toto je pouzitie express-u (nizsia vrstva ako nestjs) - Response je z express-u
         // viac na https://docs.nestjs.com/controllers#getting-up-and-running
         // je potrebne menezovat response explicitne
@@ -50,7 +55,13 @@ export class XLibController {
         // netusim, ci sa tym nepreplni pamet... zostane metoda write stat ak klient neodobera data?
 
         // metoda export zapisuje do "res"
-        await this.xLazyDataTableService.export(body, res);
+        await this.xLazyDataTableService.exportCsv(body, res);
+    }
+
+    @Post('x-lazy-data-table-export-json')
+    async lazyDataTableExportJson(@Body() body: ExportJsonParam, @Res() res: Response) {
+        // podobne ako pri lazyDataTableExportCsv podporujeme stream-y
+        await this.xLazyDataTableService.exportJson(body, res);
     }
 
     @Post('x-lazy-auto-complete-suggestions')

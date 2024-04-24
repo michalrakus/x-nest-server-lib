@@ -1,4 +1,4 @@
-import {HttpStatus, Injectable} from '@nestjs/common';
+import {Injectable, StreamableFile} from '@nestjs/common';
 import {FindResult, XAggregateValues} from "../serverApi/FindResult";
 import {DataSource, SelectQueryBuilder} from "typeorm";
 import {
@@ -9,16 +9,21 @@ import {
 } from "../serverApi/FindParam";
 import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
-import {ReadStream} from "fs";
-import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transformer/RawSqlResultsToEntityTransformer";
-import {XUtilsCommon} from "../serverApi/XUtilsCommon";
-import {ExportParam, ExportType, LazyDataTableQueryParam} from "../serverApi/ExportImportParam";
+import {
+    ExportCsvParam,
+    ExportExcelParam,
+    ExportJsonParam,
+    LazyDataTableQueryParam
+} from "../serverApi/ExportImportParam";
 import {XEntityMetadataService} from "./x-entity-metadata.service";
-import {XAssoc, XEntity, XField} from "../serverApi/XEntityMetadata";
 import {XMainQueryData} from "../x-query-data/XMainQueryData";
 import {XQueryData} from "../x-query-data/XQueryData";
 import {XSubQueryData} from "../x-query-data/XSubQueryData";
-import {XCsvWriter, XExportService} from "./x-export.service";
+import {XExportColumn} from "./x-export.service";
+import {XExportExcelService} from "./x-export-excel.service";
+import {XExportJsonService} from "./x-export-json.service";
+import {XExportCsvService} from "./x-export-csv.service";
+import {numberFromString} from "../serverApi/XUtilsConversions";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -26,9 +31,10 @@ export class XLazyDataTableService {
     constructor(
         private readonly dataSource: DataSource,
         private readonly xEntityMetadataService: XEntityMetadataService,
-        private readonly xExportService: XExportService
+        private readonly xExportCsvService: XExportCsvService,
+        private readonly xExportExcelService: XExportExcelService,
+        private readonly xExportJsonService: XExportJsonService
     ) {
-        this.writeCsv = this.writeCsv.bind(this);
     }
 
     async findRows(findParam : FindParam): Promise<FindResult> {
@@ -188,203 +194,67 @@ export class XLazyDataTableService {
         return rows[0];
     }
 
-    async export(exportParam: ExportParam, res: Response) {
-        if (exportParam.exportType === ExportType.Csv) {
-            await this.xExportService.exportCsv(exportParam, res, this.writeCsv);
-        }
-        else if (exportParam.exportType === ExportType.Json) {
-            await this.exportJson(exportParam.queryParam, res);
-        }
-    }
+    // ************** podpora pre export ******************
 
-    writeCsv(queryParam: LazyDataTableQueryParam, xCsvWriter: XCsvWriter): Promise<void> {
+    // poznamka: ak by sa tieto funkcie (alebo ich cast) dali presunut do export servisov, bolo by fajn...
 
-        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(queryParam);
-        if (existsToManyAssoc) {
-            return this.writeCsvUsingList(queryParam, selectQueryBuilder, xCsvWriter);
-        } else {
-            return this.writeCsvUsingStream(queryParam, selectQueryBuilder, xCsvWriter);
-        }
-    }
+    async exportExcel(exportExcelParam: ExportExcelParam): Promise<StreamableFile> {
 
-    async writeCsvUsingStream(queryParam: LazyDataTableQueryParam, selectQueryBuilder: SelectQueryBuilder<unknown>, xCsvWriter: XCsvWriter): Promise<void> {
-
-        const readStream: ReadStream = await selectQueryBuilder.stream();
-
-        // potrebujeme zoznam xField-ov, aby sme vedeli urcit typ fieldu
-        const xFieldList: XField[] = this.createXFieldList(queryParam);
-
-        readStream.on('data', data => {
-            const entityObj = this.transformToEntity(data, selectQueryBuilder);
-            this.writeSimpleObjectRowToCsv(entityObj, queryParam.fields, xFieldList, xCsvWriter);
-        });
-
-        readStream.on('end', () => {
-            xCsvWriter.end();
-        });
-    }
-
-    async writeCsvUsingList(queryParam: LazyDataTableQueryParam, selectQueryBuilder: SelectQueryBuilder<unknown>, xCsvWriter: XCsvWriter): Promise<void> {
-
+        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(exportExcelParam.queryParam);
         const rowList: any[] = await selectQueryBuilder.getMany();
 
-        const xEntity = this.xEntityMetadataService.getXEntity(queryParam.entity);
-
-        // potrebujeme zoznam xField-ov, aby sme vedeli urcit typ fieldu
-        const xFieldList: XField[] = this.createXFieldList(queryParam);
-
-        for (const row of rowList) {
-            this.writeObjectRowToCsv(row, queryParam.fields, queryParam.fieldsToDuplicateValues, xEntity, xFieldList, xCsvWriter);
-        }
-
-        xCsvWriter.end();
-    }
-
-    private writeSimpleObjectRowToCsv(entityObj: any, fields: string[], xFieldList: XField[], xCsvWriter: XCsvWriter) {
-        const csvValues: Array<any> = new Array<any>(fields.length);
-        for (const [index, field] of fields.entries()) {
-            let value: any = XUtilsCommon.getValueByPath(entityObj, field);
-            // skonvertujeme hodnotu, ak je to potrebne
-            [value] = this.convertValues([value], xFieldList[index], xCsvWriter);
-            csvValues[index] = value;
-        }
-        // a zapiseme riadok
-        xCsvWriter.writeRow(...csvValues);
-    }
-
-    private writeObjectRowToCsv(entityObj: any, fields: string[], fieldsToDuplicateValues: string[] | undefined, xEntity: XEntity, xFieldList: XField[], xCsvWriter: XCsvWriter) {
-        // vytvarany csv row je tvoreny stlpcami - standardne ma stlpec presne 1 hodnotu,
-        // ak sa vsak jedna o field dotahovany cez one-to-many asociaciu, ma dany stlpec vsetky hodnoty dotiahnute cez danu asociaciu (moze byt aj 0 hodnot)
-        // dlzku najdlhsieho stlpca si zapiseme do "maxColumnIndex"
-        // (zatial) funguje len pre one-to-many asociacie ktore su na zaciatku "path" - TODO - poriest rekurzivne
-        const columnList: Array<any[]> = new Array<any[]>(fields.length);
-        let maxColumnLength: number = 1;
-        for (const [index, path] of fields.entries()) {
-            let columnValues: any[] = undefined;
-            // ak mame OneToMany asociaciu, musime nacitat zoznam hodnot
-            const [field, restPath]: [string, string | null] = XUtilsCommon.getFieldAndRestPath(path);
-            if (restPath !== null) {
-                const xAssoc: XAssoc = this.xEntityMetadataService.getXAssoc(xEntity, field);
-                if (xAssoc.relationType === "one-to-many") {
-                    const assocRowList: any[] = entityObj[xAssoc.name];
-                    if (!Array.isArray(assocRowList)) {
-                        throw `Unexpected error - row list not found on one-to-many assoc ${xAssoc.name}`;
-                    }
-                    columnValues = assocRowList.map<any>((row) => XUtilsCommon.getValueByPath(row, restPath));
-                    if (columnValues.length > maxColumnLength) {
-                        maxColumnLength = columnValues.length;
-                    }
-                }
+        const columns: XExportColumn[] = [];
+        for (const [index, field] of exportExcelParam.queryParam.fields.entries()) {
+            const header: string = exportExcelParam.excelCsvParam.headers ? exportExcelParam.excelCsvParam.headers[index] : "";
+            let width: number | undefined = undefined;
+            const widthStr: string | undefined = exportExcelParam.widths[index]; // prichadza napr. '7.75rem'
+            if (widthStr && widthStr.endsWith('rem')) {
+                width = numberFromString(widthStr.substring(0, widthStr.length - 'rem'.length)) ?? undefined;
+                width = width ? width * 1.1 : undefined; // stlpce pre datumy su uzke, tak este prenasobime bulharskou konstantou
             }
-            if (columnValues === undefined) {
-                // nemame one-to-many asociaciu, jedna sa o standardny atribut
-                // zapiseme si pole o dlzky 1
-                columnValues = [XUtilsCommon.getValueByPath(entityObj, path)];
-            }
-            // skonvertujeme hodnoty, ak je to potrebne
-            columnValues = this.convertValues(columnValues, xFieldList[index], xCsvWriter);
-            // ulozime si stlpec do pola stlpcov
-            columnList[index] = columnValues;
+            columns.push({header: header, field: field, width: width});
         }
-        // "matrix" mame hotovy, vytvorime csv riadky
-        for (let rowIndex: number = 0; rowIndex < maxColumnLength; rowIndex++) {
-            const csvValues: Array<any> = new Array<any>(fields.length);
-            for (const [index, columnValues] of columnList.entries()) {
-                let csvValue: any;
-                if (rowIndex < columnValues.length) {
-                    csvValue = columnValues[rowIndex];
-                }
-                else {
-                    csvValue = ""; // prazdna bunka (default)
 
-                    // ak mame zadane stlpce, v ktorych chceme duplikovat hodnoty, tak zduplikujeme hodnotu z prveho riadku (master zaznam)
-                    // (nemalo by sa jednat o toMany stlpce)
-                    if (fieldsToDuplicateValues) {
-                        if (fieldsToDuplicateValues.includes(fields[index])) {
-                            if (columnValues.length > 0) {
-                                csvValue = columnValues[0];
-                            }
-                        }
-                    }
-                }
-                csvValues[index] = csvValue;
-            }
-            // a zapiseme riadok
-            xCsvWriter.writeRow(...csvValues);
+        return this.xExportExcelService.exportBase(
+            exportExcelParam.queryParam.entity,
+            columns,
+            exportExcelParam.excelCsvParam.headers !== undefined,
+            exportExcelParam.excelCsvParam.toManyAssocExport,
+            exportExcelParam.excelCsvParam.fieldsToDuplicateValues,
+            exportExcelParam.queryParam.entity,
+            rowList
+        );
+    }
+
+    exportCsv(exportCsvParam: ExportCsvParam, res: Response): Promise<void> {
+
+        const columns: XExportColumn[] = [];
+        for (const [index, field] of exportCsvParam.queryParam.fields.entries()) {
+            const header: string = exportCsvParam.excelCsvParam.headers ? exportCsvParam.excelCsvParam.headers[index] : "";
+            columns.push({header: header, field: field});
+        }
+
+        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(exportCsvParam.queryParam);
+        if (existsToManyAssoc) {
+            return this.xExportCsvService.exportUsingList(exportCsvParam, columns, selectQueryBuilder, res);
+        } else {
+            return this.xExportCsvService.exportUsingStream(exportCsvParam, columns, selectQueryBuilder, res);
         }
     }
 
-    private convertValues(values: any[], xField: XField, xCsvWriter: XCsvWriter): any[] {
-        // kedze niektore decimal hodnoty neprichadzaju ako number (typeof value nie je 'number' ale 'string') preto pouzijeme xField
-        // (je to pravdepodobne dosledok pouzitia nestandardej transformToEntity ale stalo sa to napr. aj v skch-finance v BudgetReportService
-        if (xField.type === "decimal") {
-            // skonvertujeme rovno na string
-            values = values.map<any>((value) => (value !== null && value !== undefined) ? xCsvWriter.number(value, xField.scale) : value);
-        }
-        return values;
-    }
-
-    private createXFieldList(queryParam: LazyDataTableQueryParam): XField[] {
-        const xFieldList: XField[] = [];
-        const xEntity = this.xEntityMetadataService.getXEntity(queryParam.entity);
-        for (const field of queryParam.fields) {
-            xFieldList.push(this.xEntityMetadataService.getXFieldByPath(xEntity, field));
-        }
-        return xFieldList;
-    }
-
-    private exportJson(queryParam: LazyDataTableQueryParam, res: Response): Promise<void> {
+    exportJson(exportJsonParam: ExportJsonParam, res: Response): Promise<void> {
 
         const headerCharset: string = "UTF-8";
         res.setHeader(`Content-Type`, `application/json; charset=${headerCharset}`);
         res.charset = headerCharset; // default encoding, pouziva sa pravdepodobne ak neni setnuty charset v 'Content-Type' (pozri riadok vyssie)
 
-        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(queryParam);
+        const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(exportJsonParam.queryParam);
         if (existsToManyAssoc) {
-            return this.exportJsonUsingList(selectQueryBuilder, res);
+            return this.xExportJsonService.exportJsonUsingList(selectQueryBuilder, res);
         }
         else {
-            return this.exportJsonUsingStream(selectQueryBuilder, res);
+            return this.xExportJsonService.exportJsonUsingStream(selectQueryBuilder, res);
         }
-    }
-
-    private async exportJsonUsingList(selectQueryBuilder: SelectQueryBuilder<unknown>, res: Response): Promise<void> {
-
-        const rowList: any[] = await selectQueryBuilder.getMany();
-
-        res.write(XUtilsCommon.objectAsJSON(rowList), "utf8");
-
-        res.status(HttpStatus.OK);
-        res.end();
-    }
-
-    private async exportJsonUsingStream(selectQueryBuilder: SelectQueryBuilder<unknown>, res: Response): Promise<void> {
-
-        const readStream: ReadStream = await selectQueryBuilder.stream();
-
-        res.write("[", "utf8");
-
-        let firstRow = true;
-
-        readStream.on('data', data => {
-            const entityObj = this.transformToEntity(data, selectQueryBuilder);
-            let rowStr: string = "";
-            if (firstRow) {
-                firstRow = false;
-            }
-            else {
-                rowStr += ",";
-            }
-            rowStr += XUtilsCommon.newLine;
-            rowStr += XUtilsCommon.objectAsJSON(entityObj);
-            res.write(rowStr, "utf8");
-        });
-
-        readStream.on('end', () => {
-            res.write(XUtilsCommon.newLine + "]", "utf8");
-            res.status(HttpStatus.OK);
-            res.end();
-        });
     }
 
     private createSelectQueryBuilder(queryParam: LazyDataTableQueryParam): [SelectQueryBuilder<unknown>, boolean] {
@@ -402,13 +272,6 @@ export class XLazyDataTableService {
                 fullTextSearch.fields = fields; // ako default stlpce pouzijeme stlpce browsu
             }
         }
-    }
-
-    private transformToEntity(data: any, selectQueryBuilder: SelectQueryBuilder<unknown>): any {
-        // pozor, tato transformacia vracia niektore decimaly (napr. Car.price) ako string, to asi nie je standard
-        const transformer = new RawSqlResultsToEntityTransformer(selectQueryBuilder.expressionMap, selectQueryBuilder.connection.driver, [], [], undefined);
-        const entityList: any[] = transformer.transform([data], selectQueryBuilder.expressionMap.mainAlias!);
-        return entityList[0];
     }
 
     // ************** podpora pre autocomplete ******************

@@ -7,6 +7,9 @@ import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 import {XFileController} from "./x-file.controller";
 import {XFileService} from "./x-file.service";
 import {XExportService} from "./x-export.service";
+import {XExportCsvService} from "./x-export-csv.service";
+import {XExportJsonService} from "./x-export-json.service";
+import {XExportExcelService} from "./x-export-excel.service";
 
 @Module({})
 export class XLibModule {
@@ -20,7 +23,9 @@ export class XLibModule {
       providers: [
           XLibService,
           XLazyDataTableService,
-          XExportService,
+          XExportCsvService,
+          XExportExcelService,
+          XExportJsonService,
           XEntityMetadataService,
           XBrowseFormMetadataService,
           XFileService
@@ -30,7 +35,9 @@ export class XLibModule {
             XLibService,
             XFileService,
             XLazyDataTableService,
-            XExportService
+            XExportCsvService,
+            XExportExcelService,
+            XExportJsonService,
         ],
       module: XLibModule
     };

@@ -71,6 +71,24 @@ export class XUtilsMetadataCommon {
         }
     }
 
+    // returns true if path contains some toMany assoc
+    static hasPathToManyAssoc(xEntity: XEntity, path: string): boolean {
+        const [field, restPath] = XUtilsCommon.getFieldAndRestPath(path);
+        if (restPath === null) {
+            return false;
+        }
+        else {
+            const xAssoc: XAssoc = XUtilsMetadataCommon.getXAssoc(xEntity, field);
+            if (xAssoc.relationType === "one-to-many" || xAssoc.relationType === "many-to-many") {
+                return true;
+            }
+            else {
+                const xAssocEntity = XUtilsMetadataCommon.getXEntity(xAssoc.entityName);
+                return XUtilsMetadataCommon.hasPathToManyAssoc(xAssocEntity, restPath);
+            }
+        }
+    }
+
     static getXFieldByPathStr(entity: string, path: string): XField {
         return XUtilsMetadataCommon.getXFieldByPath(XUtilsMetadataCommon.getXEntity(entity), path);
     }

@@ -1,148 +1,138 @@
-import {HttpStatus, Injectable} from "@nestjs/common";
-import {Response} from "express";
-import {CsvDecimalFormat, CsvEncoding, CsvParam, ExportParam} from "../serverApi/ExportImportParam";
-import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
-import {numberFromModel} from "../serverApi/XUtilsConversions";
-// poznamka - ked tu bolo: import iconv from "iconv-lite"; tak to nefungovalo a zevraj to suvisi s nestjs
-import * as iconv from "iconv-lite";
+import {XMultilineExportType} from "../serverApi/ExportImportParam";
+import {XEntity, XField} from "../serverApi/XEntityMetadata";
+import {XUtilsMetadataCommon} from "../serverApi/XUtilsMetadataCommon";
+import {XUtilsCommon} from "../serverApi/XUtilsCommon";
+import {AsUIType, convertValueBase} from "../serverApi/XUtilsConversions";
+import {SelectQueryBuilder} from "typeorm";
+import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transformer/RawSqlResultsToEntityTransformer";
 
-// pomocna trieda
-export class XCsvWriter {
+// struktury pouzivane pre export do excelu a do csv
 
-    csvParam: CsvParam;
-    res: Response;
+// typ fieldu - ide ako parameter do funkcie convertValue
+// mal by sa pouzivat ako typ pre XField.type namiesto string-u ale v sucasnosti moze ist do XField.type hocico, takze zatial len tu pouzivame
 
-    constructor(csvParam: CsvParam, res: Response) {
-        this.csvParam = csvParam;
-        this.res = res;
-    }
+export type XFieldType = "string" | "decimal" | "date" | "datetime" | "interval" | "boolean";
 
-    writeRow(...valueList: any) {
-        let csvRow: string = "";
-        let firstItem: boolean = true;
-        for (const value of valueList) {
-
-            let valueStr: string = this.convertToStr(value);
-            valueStr = this.processCsvItem(valueStr);
-
-            if (firstItem) {
-                firstItem = false;
-            }
-            else {
-                csvRow += this.csvParam.csvSeparator;
-            }
-            csvRow += valueStr;
-        }
-        csvRow += XUtilsCommon.newLine;
-        this.res.write(iconv.encode(csvRow, this.csvParam.csvEncoding)); // neviem ci toto je idealny sposob ako pouzivat iconv, ale funguje...
-    }
-
-    // must be called at the end of export (after calls writeRow(...))
-    end() {
-        this.res.status(HttpStatus.OK);
-        this.res.end();
-    }
-
-    private convertToStr(value: any): string {
-
-        let valueStr: string;
-        if (value === null || value === undefined) {
-            valueStr = ""; // TODO - pripadne dorobit do dialogu volbu, ze null -> "null", ak by sme chceli rozlisovat od prazdneho string-u
-        }
-        else if (typeof value === 'number') {
-            // pokus o automatiku, aby programator pri custom exporte nemusel formatovat decimal hodnoty - zaokruhluje na 2 desatiny!
-            // pri generickom exporte uz sem pride string
-            valueStr = this.numberAsCsv(value);
-        }
-        else if (value instanceof Date) {
-            // pouziva sa aj pri generickom exporte
-            // TODO - ak pre datetime nastavime vsetky zlozky casu na 00:00:00, tak sformatuje hodnotu ako datum a spravi chybu pri zapise do DB - zapise  1:00:00
-            if (value.getHours() === 0 && value.getMinutes() === 0 && value.getSeconds() === 0) {
-                valueStr = dateFormat(value, 'yyyy-mm-dd');
-            }
-            else {
-                // jedna sa o datetime
-                valueStr = dateFormat(value, 'yyyy-mm-dd HH:MM:ss');
-            }
-        }
-        else {
-            valueStr = value.toString();
-        }
-        return valueStr;
-    }
-
-    private processCsvItem(valueStr: string): string {
-        // moj stary Excel 2010 nechcel nacitavat subor ktory obsahoval v bunke retazec ID
-        if (valueStr === "ID") {
-            valueStr = '"' + valueStr + '"';
-        }
-        else {
-            valueStr = valueStr.replace(/"/g, '""'); // ekvivalent pre regexp /"/g je: new RegExp('"', 'g')
-            // aj tu pouzivam XUtils.csvSeparator
-            if (valueStr.search(new RegExp(`("|${this.csvParam.csvSeparator}|\n)`, 'g')) >= 0) {
-                valueStr = '"' + valueStr + '"';
-            }
-        }
-        return valueStr;
-    }
-
-    // helper for formatting numbers
-    number(value: any, fractionDigits?: number): string {
-        const numberValue: number | null = numberFromModel(value); // niekedy zevraj prichadzaju stringy z DB, tak pre istotu volame numberFromModel
-        return this.numberAsCsv(numberValue, fractionDigits);
-    }
-
-    // fcia numberAsUI vracia format 123,456,78 co nechceme, preto mame numberAsCsv
-    numberAsCsv(value: number | null, fractionDigits?: number): string {
-        let valueStr: string = "";
-        // valueStr should be for example 123456,78
-        if (value !== null) {
-            valueStr = value.toFixed(fractionDigits ?? 2); // vrati 123456.78 a tiez zaokruhluje (co nam vyhovuje :-)
-            if (this.csvParam.csvDecimalFormat === CsvDecimalFormat.Comma) {
-                valueStr = valueStr.replace('.', ','); // result 123456,78
-            }
-            // pre this.csvParam.csvDecimalFormat === CsvDecimalFormat.Dot ponechame 123456.78
-        }
-        return valueStr;
-    }
+export interface XExportColumn {
+    header: string;
+    field: string | ((row: any) => any);
+    type?: XFieldType; // explicitne zadany typ - pouziva sa, ak nemame metadatovy XField
+    width?: number;
 }
 
-@Injectable()
-export class XExportService {
+export abstract class XExportService {
 
-    async exportCsv(exportParam: ExportParam, res: Response, writeCsv: (queryParam: any, xCsvWriter: XCsvWriter) => Promise<void>) {
+    // funkcia pouzivana v XExportExcelService a XExportCsvService
+    exportRow(columns: XExportColumn[], multilineExportType: XMultilineExportType, fieldsToDuplicateValues: string[] | undefined, xEntity: XEntity | undefined, row: any): Array<Array<any>> {
 
-        const headerCharset: string = XExportService.getHeaderCharset(exportParam.csvParam.csvEncoding); // napr. UTF-8, windows-1250
+        // vytvarany excel/csv row je tvoreny stlpcami - standardne ma stlpec presne 1 hodnotu,
+        // ak sa vsak jedna o field dotahovany cez one-to-many asociaciu, ma dany stlpec vsetky hodnoty dotiahnute cez danu asociaciu (moze byt aj 0 hodnot)
+        // dlzku najdlhsieho stlpca si zapiseme do "maxColumnIndex"
+        const columnList: Array<any[]> = new Array<any[]>(columns.length);
+        let maxColumnLength: number = 1;
+        for (const [columnIndex, xExportColumn] of columns.entries()) {
 
-        res.setHeader("Content-Type", `text/csv; charset=${headerCharset}`);
-        res.charset = headerCharset; // default encoding - pravdepodobne setne tuto hodnotu do charset=<res.charset> v header-i "Content-Type"
-        // ak neni atribut charset definovany explicitne - TODO - odskusat
+            let fieldType: string | undefined = xExportColumn.type;
+            let scale: number | undefined = undefined;
+            let value: any | any[];
+            if (typeof xExportColumn.field === 'function') {
+                value = xExportColumn.field(row);
+            } else {
+                // mame field - xExportColumn.field je typu string
+                // ak nemame explicitny typ a mame zadanu entitu, skusime najst typ v metadatach
+                if (!fieldType) {
+                    if (xEntity) {
+                        const xField: XField | undefined = XUtilsMetadataCommon.getXFieldByPathBase(xEntity, xExportColumn.field);
+                        if (xField) {
+                            fieldType = xField.type;
+                            scale = xField.scale; // pouzivane pri decimal a date
+                        }
+                    }
+                }
 
-        const xCsvWriter: XCsvWriter = new XCsvWriter(exportParam.csvParam, res);
+                value = XUtilsCommon.getValueOrValueListByPath(row, xExportColumn.field);
+            }
 
-        if (exportParam.csvParam.useHeaderLine) {
-            xCsvWriter.writeRow(...exportParam.csvParam.headers);
+            let columnValues: any[];
+            let columnValuesProcessed: boolean = false;
+            if (Array.isArray(value)) {
+                columnValues = value;
+
+                if (multilineExportType === XMultilineExportType.Singleline) {
+                    // zlucime vsetky hodnoty do jednej string hodnoty
+                    if (fieldType) {
+                        // TODO - ak nemame k dispozicii metadata, tak nam moze chybat scale
+                        //  - ak s tym bude problem, treba dorobit zadavanie scale explicitne (podobne ako sa zadava fieldType)
+                        columnValues = columnValues.map((value: any) => convertValueBase(fieldType, scale, value, true, AsUIType.Text));
+                    }
+                    else {
+                        // nepozname typ, neni dobre takto to pouzivat, vzdy by mal byt zadany typ
+                        columnValues = columnValues.map((value: any) => (value !== null && value !== undefined) ? value.toString() : "");
+                    }
+                    // columnValues je pole string-ov, mozme zlucit
+                    columnValues = [columnValues.join(", ")];
+                    // dalsiu konverziu uz nechceme
+                    columnValuesProcessed = true;
+                }
+            } else {
+                columnValues = [value]; // stlpec s jednou hodnotou v prvom riadku
+            }
+
+            if (!columnValuesProcessed) {
+                if (fieldType) {
+                    columnValues = columnValues.map((value: any) => convertValueBase(fieldType, scale, value, true, AsUIType.Excel));
+                }
+            }
+
+            if (columnValues.length > maxColumnLength) {
+                maxColumnLength = columnValues.length;
+            }
+
+            // skonvertujeme hodnoty, ak je to potrebne
+            //columnValues = this.convertValues(columnValues, xFieldList[index], xCsvWriter);
+
+            // ulozime si stlpec do pola stlpcov
+            columnList[columnIndex] = columnValues;
         }
 
-        await writeCsv(exportParam.queryParam, xCsvWriter);
+        // "matrix" mame hotovy, vytvorime riadky
+        const resultRowList: Array<Array<any>> = new Array<Array<any>>(maxColumnLength);
+        for (let rowIndex: number = 0; rowIndex < maxColumnLength; rowIndex++) {
+            const rowValues: Array<any> = new Array<any>(columns.length);
+            for (const [index, columnValues] of columnList.entries()) {
+                let csvValue: any;
+                if (rowIndex < columnValues.length) {
+                    csvValue = columnValues[rowIndex];
+                }
+                else {
+                    csvValue = ""; // prazdna bunka (default)
 
-        // because of using streams, the programmer has to call xCsvWriter.end() explicitly
-        //res.status(HttpStatus.OK);
-        //res.end();
+                    // ak mame zadane stlpce, v ktorych chceme duplikovat hodnoty, tak zduplikujeme hodnotu z prveho riadku (master zaznam)
+                    // (nemalo by sa jednat o toMany stlpce)
+                    if (fieldsToDuplicateValues) {
+                        const field: string | ((row: any) => any) = columns[index].field;
+                        if (typeof field === 'string') {
+                            if (fieldsToDuplicateValues.includes(field)) {
+                                if (columnValues.length > 0) {
+                                    csvValue = columnValues[0];
+                                }
+                            }
+                        }
+                    }
+                }
+                rowValues[index] = csvValue;
+            }
+            // a zapiseme riadok
+            resultRowList[rowIndex] = rowValues;
+        }
+        return resultRowList;
     }
 
-    static getHeaderCharset(csvEncoding: CsvEncoding): string {
-        let headerCharset: string;
-        switch (csvEncoding) {
-            case CsvEncoding.Utf8:
-                headerCharset = "UTF-8";
-                break;
-            case CsvEncoding.Win1250:
-                headerCharset = "windows-1250";
-                break;
-            default:
-                throw `HeaderCharset for csvEncoding "${csvEncoding}" not implemented`;
-        }
-        return headerCharset;
+    // ak bude treba, presunut do XUtils
+    protected transformToEntity(data: any, selectQueryBuilder: SelectQueryBuilder<unknown>): any {
+        // pozor, tato transformacia vracia niektore decimaly (napr. Car.price) ako string, to asi nie je standard
+        const transformer = new RawSqlResultsToEntityTransformer(selectQueryBuilder.expressionMap, selectQueryBuilder.connection.driver, [], [], undefined);
+        const entityList: any[] = transformer.transform([data], selectQueryBuilder.expressionMap.mainAlias!);
+        return entityList[0];
     }
 }

@@ -3,15 +3,28 @@
 import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
 import {XCustomFilterItem, XFullTextSearch} from "./FindParam";
 
+// ************** export ***************
+
 export enum ExportType {
+    Excel = "excel",
     Csv = "csv",
     Json = "json"
 }
 
-export interface ExportParam {
-    exportType: ExportType;
-    csvParam?: CsvParam; // pouziva sa ak exportType = csv
-    queryParam: LazyDataTableQueryParam | any; // query z lazy tabulky alebo parametre specificke pre konkretny export
+export interface ExportExcelParam {
+    queryParam: LazyDataTableQueryParam;
+    excelCsvParam: ExcelCsvParam;
+    widths: string[]; // sirky stlpcov v tvare napr. ['7.75rem', '20rem', '8.5rem', '8.5rem', '6rem']
+}
+
+export interface ExportCsvParam {
+    queryParam: LazyDataTableQueryParam;
+    excelCsvParam: ExcelCsvParam;
+    csvParam: CsvParam;
+}
+
+export interface ExportJsonParam {
+    queryParam: LazyDataTableQueryParam;
 }
 
 export interface LazyDataTableQueryParam {
@@ -21,7 +34,28 @@ export interface LazyDataTableQueryParam {
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields: string[];
-    fieldsToDuplicateValues?: string[];
+}
+
+// parametre pouzivane pri exporte do excelu a do csv
+export interface ExcelCsvParam {
+    headers?: string[]; // ak je undefined, tak nevytvori header line
+    toManyAssocExport: XMultilineExportType; // export toMany asociacii
+    multilineTextExport: XMultilineExportType; // export viacriadkovych textov (contentType = multiline/html)
+    fieldsToDuplicateValues?: string[]; // (podmnozina LazyDataTableQueryParam.fields)
+}
+
+// exportovanie hodnot z toMany asociacii, pripadne viacriadkovych textov
+export enum XMultilineExportType {
+    Singleline = "singleline", // hodnoty sa pospajaju do jednej dlhej hodnoty
+    Multiline = "multiline", // hodnoty sa zapisu pod seba do stlpca
+    Off = "off" // stlpce obsahujuce viac hodnot/riadkov sa vynechaju z exportu
+}
+
+// csv parametre pouzivane pri exporte/importe csv
+export interface CsvParam {
+    csvSeparator: CsvSeparator;
+    csvDecimalFormat: CsvDecimalFormat;
+    csvEncoding: CsvEncoding;
 }
 
 // vo windowse zavisi od regionalnych nastaveni, default nastavenie je ";" a preto vecsinou aj excel produkuje csv s ";" (menej sa to bije s decimalmi)
@@ -45,14 +79,7 @@ export enum CsvEncoding {
     Win1250 = "win1250"
 }
 
-// csv parametre pouzivane pri exporte/importe csv
-export interface CsvParam {
-    useHeaderLine: boolean;
-    headers?: string[];
-    csvSeparator: CsvSeparator;
-    csvDecimalFormat: CsvDecimalFormat;
-    csvEncoding: CsvEncoding;
-}
+// ************** import ***************
 
 export enum ImportType {
     Csv = "csv",

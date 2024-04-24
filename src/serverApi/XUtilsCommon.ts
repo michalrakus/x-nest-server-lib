@@ -251,6 +251,19 @@ export class XUtilsCommon {
         return diff;
     }
 
+    // returns month diff for 2 dates of type month (YYYY-MM-01) - days are ignored
+    static monthDiff(monthOld: Date | null, monthNew: Date | null): number | null {
+        let diff: number | null = null;
+        if (monthOld !== null && monthNew !== null) {
+            const yearCountNew: number = monthNew.getFullYear();
+            const monthCountNew: number = monthNew.getMonth();
+            const yearCountOld: number = monthOld.getFullYear();
+            const monthCountOld: number = monthOld.getMonth();
+            diff = (yearCountNew - yearCountOld) * 12 + (monthCountNew - monthCountOld);
+        }
+        return diff;
+    }
+
     static findFirstMatch(pattern: RegExp, value: string): string | null {
         const match: RegExpExecArray | null = pattern.exec(value);
         return match != null ? match[0] : null;
