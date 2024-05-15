@@ -97,15 +97,23 @@ export class XUtilsMetadataCommon {
         return xEntity.assocMap[assocField];
     }
 
-    static getXAssocByPath(xEntity: XEntity, path: string): XAssoc {
+    static getXAssocToOneByPath(xEntity: XEntity, path: string): XAssoc {
+        return XUtilsMetadataCommon.getXAssocByPath(xEntity, path, ["many-to-one", "one-to-one"]);
+    }
+
+    static getXAssocToManyByPath(xEntity: XEntity, path: string): XAssoc {
+        return XUtilsMetadataCommon.getXAssocByPath(xEntity, path, ["one-to-many", "many-to-many"]);
+    }
+
+    static getXAssocByPath(xEntity: XEntity, path: string, relationTypeList?: XRelationType[]): XAssoc {
         const [field, restPath] = XUtilsCommon.getFieldAndRestPath(path);
         if (restPath === null) {
             return XUtilsMetadataCommon.getXAssoc(xEntity, field);
         }
         else {
-            const xAssoc: XAssoc = XUtilsMetadataCommon.getXAssoc(xEntity, field);
+            const xAssoc: XAssoc = XUtilsMetadataCommon.getXAssoc(xEntity, field, relationTypeList);
             const xAssocEntity = XUtilsMetadataCommon.getXEntity(xAssoc.entityName);
-            return XUtilsMetadataCommon.getXAssocByPath(xAssocEntity, restPath);
+            return XUtilsMetadataCommon.getXAssocByPath(xAssocEntity, restPath, relationTypeList);
         }
     }
 

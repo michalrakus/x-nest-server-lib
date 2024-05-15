@@ -90,10 +90,11 @@ export class XLibService {
 
         // poznamka: ak sa maju pri zavolani save(<master>) zapisovat aj detail zaznamy,
         // treba na OneToMany asociaciu zapisat: {cascade: ["insert", "update", "remove"]}
-        // ("remove" netreba ale ten by sme chceli uplatnovat pri removeRow)
+        // ("remove" netreba ale ten zas uplatnujeme na nasom custom removeRow)
 
-        // poznamka 2: na options na asociacii (OneToMany ale aj na inych) som nasiel atribut orphanedRowAction
-        // je pravdepodobne, ze tento atribut robi tu odprogramovany "orphan removal"
+        // poznamka 2: na options na asociacii som nasiel atribut orphanedRowAction
+        // je pravdepodobne, ze tento atribut robi tu odprogramovany "orphan removal",
+        // mal by byt zadany na ManyToOne asociacii (https://john-hu.medium.com/typeorm-deletes-one-to-many-orphans-a7404f922895)
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
 
@@ -103,28 +104,31 @@ export class XLibService {
             delete row.object.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
         }
 
-        let assocToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many", "many-to-many"]);
+        let assocOneToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many"]);
         const rowId = row.object[xEntity.idField];
         const insert: boolean = (rowId === undefined);
-        assocToManyList = assocToManyList.filter(insert ? (assoc: XAssoc) => assoc.isCascadeInsert : (assoc: XAssoc) => assoc.isCascadeUpdate);
+        assocOneToManyList = assocOneToManyList.filter(insert ? (assoc: XAssoc) => assoc.isCascadeInsert : (assoc: XAssoc) => assoc.isCascadeUpdate);
 
-        for (const assoc of assocToManyList) {
+        for (const assoc of assocOneToManyList) {
             const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
             // uprava toho co prislo z klienta - vynullujeme umelo vytvorene id-cka
             // (robime to tu a nie na klientovi, lebo ak nam nezbehne save, tak formular zostava otvoreny)
             // (poznamka: este by sa to dalo robit pri serializacii)
             const childRowList = row.object[assoc.name];
-            // pri inserte noveho zaznamu nemusi byt childRowList vytvoreny
-            if (childRowList !== undefined) {
-                for (const childRow of childRowList) {
-                    if (childRow.__x_generatedRowId) {
-                        // undefined v id-cku sposobi, ze sa priamo vykona INSERT
-                        // (netestuje sa ci zaznam uz existuje v DB (ako je tomu pri null alebo inej ciselnej hodnote))
-                        // kaskadny insert/update potom pekne zafunguje
-                        childRow[xChildEntity.idField] = undefined;
-                        delete childRow.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
-                    }
+
+            // ak nemame nacitany childRowList, tak sa asociacie nedotykame - nerobime na nej ziadne zmeny
+            if (childRowList === undefined) {
+                continue; // ideme na dalsiu asociaciu
+            }
+
+            for (const childRow of childRowList) {
+                if (childRow.__x_generatedRowId) {
+                    // undefined v id-cku sposobi, ze sa priamo vykona INSERT
+                    // (netestuje sa ci zaznam uz existuje v DB (ako je tomu pri null alebo inej ciselnej hodnote))
+                    // kaskadny insert/update potom pekne zafunguje
+                    childRow[xChildEntity.idField] = undefined;
+                    delete childRow.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
                 }
             }
         }
@@ -133,18 +137,22 @@ export class XLibService {
         if (!insert) {
             // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
             // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
-            for (const assoc of assocToManyList) {
+            for (const assoc of assocOneToManyList) {
                 const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
                 const idList: any[] = [];
                 const childRowList = row.object[assoc.name];
-                // pri inserte noveho zaznamu nemusi byt childRowList vytvoreny
-                if (childRowList !== undefined) {
-                    for (const childRow of childRowList) {
-                        const id = childRow[xChildEntity.idField];
-                        if (id !== null && id !== undefined) {
-                            idList.push(id);
-                        }
+
+                // ak nemame nacitany childRowList, tak sa asociacie nedotykame - nerobime na nej ziadne zmeny
+                // (ak niekto ocakava ze budu vymazane zaznamy na asociacii v takomto pripade, nech nastavi oneToMany atribut na prazdny zoznam - priradi object.<assoc> = [])
+                if (childRowList === undefined) {
+                    continue; // ideme na dalsiu asociaciu
+                }
+
+                for (const childRow of childRowList) {
+                    const id = childRow[xChildEntity.idField];
+                    if (id !== null && id !== undefined) {
+                        idList.push(id);
                     }
                 }
 
@@ -200,6 +208,15 @@ export class XLibService {
         // ani poslanie celeho json objektu (aj s child zaznamami) nepomohlo... <- to je asi nutne ak to ma zafungovat...
         // preto sme kaskadny delete dorobili, funguje cez vsetky asociacie ktore maju cascade "remove"
         // navyse tu mame aj mazanie suborov, ak strom objektov obsahuje zaznam XFile
+
+        // update 14.5.2024: TypeORM nepodporuje cascade delete na asociaciach ("remove" mozno sluzi na volanie listenerov zavesenych na remove operaciu, netusim...)
+        // cascade delete sa realizuje v DB cez FK constrainty (klauzula ON DELETE CASCADE - tuto klauzulu vytvara option {onDelete: "CASCADE"} zapisany
+        // na ManyToOne asociacii - v pripade ak sa generuju tabulky z modelu)
+        // jedina vynimka su ManyToMany asociacie - ak sa zavola remove(<master>) tak automaticky vymaze "link" zaznamy
+        // (ManyToMany atributy nemusia byt nacitane, TypeORM si selectami zisti ci "link" zaznamy existuju)
+        // pre jednoduchost som sa rozhodol pouzivat ON DELETE CASCADE na databaze pre "link" zaznamy (plati len pre ManyToMany asociacie)
+
+        // asi by nebolo od veci v buducnosti prejst na cascade delete realizovany v DB cez FK constrainty, ked sa preto v TypeORM rozhodli...
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
         return this.removeRowsInTransaction(manager, xEntity, [row.id], fileListToRemove, row.assocsToRemove);

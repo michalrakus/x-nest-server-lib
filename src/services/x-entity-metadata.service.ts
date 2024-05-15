@@ -21,8 +21,10 @@ export class XEntityMetadataService {
             xEntityMap = {};
             const entityMetadataList = this.dataSource.entityMetadatas;
             for (const entityMetadata of entityMetadataList) {
-                const xEntity: XEntity = this.getXEntityForEntityMetadata(entityMetadata);
-                xEntityMap[xEntity.name] = xEntity;
+                if (!entityMetadata.isJunction) { // tabulky vytvorene manyToMany asociaciami nechceme
+                    const xEntity: XEntity = this.getXEntityForEntityMetadata(entityMetadata);
+                    xEntityMap[xEntity.name] = xEntity;
+                }
             }
             XUtilsMetadataCommon.setXEntityMap(xEntityMap);
         }
@@ -89,8 +91,7 @@ export class XEntityMetadataService {
         }
         const idField = columnMetadataList[0].propertyName;
 
-        // TODO - este chyba ManyToMany
-        const assocMap: XAssocMap = this.createAssocMap([...entityMetadata.manyToOneRelations, ...entityMetadata.oneToOneRelations, ...entityMetadata.oneToManyRelations]);
+        const assocMap: XAssocMap = this.createAssocMap([...entityMetadata.manyToOneRelations, ...entityMetadata.oneToOneRelations, ...entityMetadata.oneToManyRelations, ...entityMetadata.manyToManyRelations]);
         return {name: entityMetadata.name, idField: idField, fieldMap: fieldMap, assocMap: assocMap};
     }
 
