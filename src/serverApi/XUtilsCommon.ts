@@ -1,3 +1,6 @@
+import {XEntity, XField} from "./XEntityMetadata";
+import {XUtilsMetadataCommon} from "./XUtilsMetadataCommon";
+import {AsUIType, convertValue} from "./XUtilsConversions";
 
 // funkcie spolocne pre Web i pre Server
 export class XUtilsCommon {
@@ -129,23 +132,63 @@ export class XUtilsCommon {
         }
     }
 
-    static createDisplayValue(object: any, fields: string[]): string {
+    static createDisplayValue(object: any, xEntity: XEntity | undefined, fields: string[]): string {
         let displayValue: string = "";
         for (const field of fields) {
-            // TODO - konverzie na spravny typ/string
-            const [prefix, fieldOnly]: [string | null, string] = XUtilsCommon.getPrefixAndField(field);
-            const value: any = XUtilsCommon.getValueByPath(object, fieldOnly);
-            if (value !== null && value !== undefined) {
-                const valueStr: string = value.toString(); // TODO - spravnu konverziu
-                if (valueStr !== "") {
+            const valueStr: string = XUtilsCommon.createDisplayValueForField(object, xEntity, field);
+            if (valueStr !== "") {
+                if (displayValue !== "") {
+                    displayValue += " ";
+                }
+                displayValue += valueStr;
+            }
+        }
+        return displayValue;
+    }
+
+    static createDisplayValueForField(object: any, xEntity: XEntity | undefined, field: string): string {
+        // pouziva sa podobny algoritmus ako v XLazyDataTable - metoda bodyTemplate
+        // (ale nie je to take komplexne ako v XLazyDataTable - nevie renderovat napr. html (rich text))
+        const [prefix, fieldOnly]: [string | null, string] = XUtilsCommon.getPrefixAndField(field);
+        let xField: XField | undefined = undefined;
+        if (xEntity) {
+            xField = XUtilsMetadataCommon.getXFieldByPath(xEntity, fieldOnly);
+        }
+        let displayValue: string;
+        const valueOrValueList: any | any[] = XUtilsCommon.getValueOrValueListByPath(object, fieldOnly);
+        if (Array.isArray(valueOrValueList)) {
+            // zatial je zoznam hodnot OneToMany asociacie oddeleny " ", nedat zoznam napr. do zatvoriek [<zoznam>] ?
+            displayValue = "";
+            for (const value of valueOrValueList) {
+                const valueAsUI: string = XUtilsCommon.displayValueAsUI(prefix, value, xField);
+                if (valueAsUI !== "") {
                     if (displayValue !== "") {
                         displayValue += " ";
                     }
-                    if (prefix) {
-                        displayValue += prefix;
-                    }
-                    displayValue += valueStr;
+                    displayValue += valueAsUI;
                 }
+            }
+        }
+        else {
+            displayValue = XUtilsCommon.displayValueAsUI(prefix, valueOrValueList, xField);
+        }
+        return displayValue;
+    }
+
+    static displayValueAsUI(prefix: string | null, value: any, xField: XField | undefined): string {
+        let displayValue: string;
+        if (xField) {
+            // null hodnoty konvertuje na ""
+            displayValue = convertValue(xField, value, true, AsUIType.Text); // Text - boolean sa konvertuje na ano/nie
+        }
+        else {
+            // nemame entity, nevieme spravne konvertovat (ale casto nam staci aj takato jednoducha konverzia)
+            displayValue = (value !== null && value !== undefined) ? value.toString() : "";
+        }
+
+        if (displayValue !== "") {
+            if (prefix) {
+                displayValue = prefix + displayValue;
             }
         }
         return displayValue;
