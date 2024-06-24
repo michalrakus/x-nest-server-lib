@@ -1,6 +1,7 @@
 import {ExceptionFilter, Catch, ArgumentsHost, HttpStatus, HttpException} from '@nestjs/common';
 import { Request, Response } from 'express';
 import {QueryFailedError} from "typeorm";
+import {XAppError} from "./XAppError";
 
 @Catch()
 export class XExceptionFilter implements ExceptionFilter {
@@ -34,6 +35,7 @@ export class XExceptionFilter implements ExceptionFilter {
         }
         else if (exception instanceof Error) {
             // default (toto by mohlo ist aj v produkcii pre vsetky pripady)
+            // tadeto ide aj XAppError
             status = HttpStatus.INTERNAL_SERVER_ERROR;
             responseBody = {
                 statusCode: status,
@@ -41,7 +43,10 @@ export class XExceptionFilter implements ExceptionFilter {
                 exceptionName: exception.name
                 //stacktrace: exception.stack
             };
-            console.log(exception.stack);
+            // XAppError netreba logovat
+            if (!(exception instanceof XAppError)) {
+                console.log(exception.stack);
+            }
         }
         else {
             // exception typu string alebo number (throw 'nieco', resp. throw 300)

@@ -38,6 +38,7 @@ function generateApi(cb) {
         //"./lib/services/x-lib.controller",
         "./lib/services/x-lib.module",
         "./lib/services/XAdvancedConsoleLogger",
+        "./lib/services/XAppError",
         "./lib/services/XEnvVars",
         "./lib/services/XOptimisticLockingSubscriber",
         "./lib/services/XUtils"
