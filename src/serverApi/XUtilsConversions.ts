@@ -189,6 +189,19 @@ export function dateAsUI(value: Date | null, dateScale: XDateScale = XDateScale.
     }
 }
 
+// specialna funkcia - konvertuje Date na string YYYY-MM-DD
+export function dateAsYYYY_MM_DD(date: Date): string {
+    let monthStr: string = (date.getMonth() + 1).toString();
+    if (monthStr.length < 2) {
+        monthStr = "0" + monthStr;
+    }
+    let dayStr: string = date.getDate().toString();
+    if (dayStr.length < 2) {
+        dayStr = "0" + dayStr;
+    }
+    return `${date.getFullYear()}-${monthStr}-${dayStr}`;
+}
+
 export function datetimeAsUI(value: Date | null): string {
     if (value !== null) {
         return dateFormat(value, datetimeFormatUI());

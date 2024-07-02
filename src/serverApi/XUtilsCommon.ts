@@ -1,6 +1,6 @@
 import {XEntity, XField} from "./XEntityMetadata";
 import {XUtilsMetadataCommon} from "./XUtilsMetadataCommon";
-import {AsUIType, convertValue} from "./XUtilsConversions";
+import {AsUIType, convertValue, dateAsYYYY_MM_DD} from "./XUtilsConversions";
 
 // funkcie spolocne pre Web i pre Server
 export class XUtilsCommon {
@@ -317,15 +317,20 @@ export class XUtilsCommon {
         return `coalesce(${sqlExp}, '9999-12-31'::DATE)`;
     }
 
+    // static today(): Date {
+    //     const today = new Date();
+    //     // vynulujeme casovu zlozku
+    //     // poznamka: Date vzdy obsahuje aj casovu zlozku. Nase konverzne funkcie dateFromModel a dateFromUI pouzivaju konverziu new Date('YYYY-MM-DD')
+    //     // a tato konverzia vytvara datum s GMT/UTC/Z casom 00:00:00 (stredoeuropsky 00:01:00 - akokeby sme zadavali new Date('YYYY-MM-DDT00:00:00Z'))
+    //     //today.setHours(0, 0, 0, 0); // nastavi cas 00:00:00 v aktualnej timezone (stredoeuropsky 00:00:00, GMT 23:00:00)
+    //     // - potom nam nefunguje porovnavanie s datumami vytvorenymi cez funkcie dateFromModel a dateFromUI
+    //     today.setUTCHours(0, 0, 0, 0);
+    //     return today;
+    // }
+
+    // oprava:
     static today(): Date {
-        const today = new Date();
-        // vynulujeme casovu zlozku
-        // poznamka: Date vzdy obsahuje aj casovu zlozku. Nase konverzne funkcie dateFromModel a dateFromUI pouzivaju konverziu new Date('YYYY-MM-DD')
-        // a tato konverzia vytvara datum s GMT/UTC/Z casom 00:00:00 (stredoeuropsky 00:01:00 - akokeby sme zadavali new Date('YYYY-MM-DDT00:00:00Z'))
-        //today.setHours(0, 0, 0, 0); // nastavi cas 00:00:00 v aktualnej timezone (stredoeuropsky 00:00:00, GMT 23:00:00)
-        // - potom nam nefunguje porovnavanie s datumami vytvorenymi cez funkcie dateFromModel a dateFromUI
-        today.setUTCHours(0, 0, 0, 0);
-        return today;
+        return new Date(dateAsYYYY_MM_DD(new Date()));
     }
 
     // vrati true ak sa string sklada iba z cislic, moze mat + alebo - na zaciatku
