@@ -3,7 +3,7 @@ import {FindResult, XAggregateValues} from "../serverApi/FindResult";
 import {DataSource, SelectQueryBuilder} from "typeorm";
 import {
     FindParam,
-    ResultType,
+    ResultType, XCustomFilterItem,
     XFullTextSearch,
     XLazyAutoCompleteSuggestionsRequest
 } from "../serverApi/FindParam";
@@ -24,6 +24,7 @@ import {XExportExcelService} from "./x-export-excel.service";
 import {XExportJsonService} from "./x-export-json.service";
 import {XExportCsvService} from "./x-export-csv.service";
 import {numberFromString} from "../serverApi/XUtilsConversions";
+import {DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -315,6 +316,15 @@ export class XLazyDataTableService {
         return findResult;
     }
 */
+    // ************** fetch rows - zodpoveda metode XUtils.fetchRows na frontend-e ******************
+
+    async fetchRows(entity: string, customFilterItems?: XCustomFilterItem[] | undefined, multiSortMeta?: DataTableSortMeta[] | undefined, fields?: string[]): Promise<any[]> {
+        const findParam: FindParam = {resultType: ResultType.AllRows, entity: entity, customFilterItems: customFilterItems, multiSortMeta: multiSortMeta, fields: fields};
+        const findResult: FindResult = await this.findRows(findParam);
+        return findResult.rowList;
+    }
+
+
     // ************** stary nepouzivany export ******************
 /*
     private async exportCsv(exportParam: ExportParam, res: Response) {

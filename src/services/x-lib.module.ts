@@ -6,7 +6,6 @@ import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XBrowseFormMetadataService} from "./x-browse-form-metadata.service";
 import {XFileController} from "./x-file.controller";
 import {XFileService} from "./x-file.service";
-import {XExportService} from "./x-export.service";
 import {XExportCsvService} from "./x-export-csv.service";
 import {XExportJsonService} from "./x-export-json.service";
 import {XExportExcelService} from "./x-export-excel.service";
@@ -38,6 +37,7 @@ export class XLibModule {
             XExportCsvService,
             XExportExcelService,
             XExportJsonService,
+            XEntityMetadataService
         ],
       module: XLibModule
     };

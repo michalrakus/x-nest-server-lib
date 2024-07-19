@@ -1,6 +1,8 @@
 import {XEntity, XField} from "./XEntityMetadata";
 import {XUtilsMetadataCommon} from "./XUtilsMetadataCommon";
 import {AsUIType, convertValue, dateAsYYYY_MM_DD} from "./XUtilsConversions";
+import {XCustomFilter, XCustomFilterItem} from "./FindParam";
+import {DataTableSortMeta} from "./PrimeFilterSortMeta";
 
 // funkcie spolocne pre Web i pre Server
 export class XUtilsCommon {
@@ -232,6 +234,148 @@ export class XUtilsCommon {
         }
 
         return idRowMap;
+    }
+
+    static arrayMoveElement(array: any[], position: number, offset: number) {
+        const element = array[position];
+        array.splice(position, 1);
+        let positionNew = position + offset;
+        if (positionNew > array.length) {
+            positionNew = positionNew - array.length - 1; // element goes to the begin
+        }
+        else if (positionNew < 0) {
+            positionNew = array.length + positionNew + 1; // element goes to the end
+        }
+        if (positionNew >= 0 && positionNew <= array.length) {
+            array.splice(positionNew, 0, element);
+        }
+    }
+
+    static arraySort(array: any[], fieldOrStringFunction: string | ((item: any) => string)): any[] {
+
+        let stringFunction: ((item: any) => string);
+        if (typeof fieldOrStringFunction === 'string') {
+            stringFunction = (item: any) => item[fieldOrStringFunction];
+        }
+        else {
+            stringFunction = fieldOrStringFunction;
+        }
+
+        return array.sort((suggestion1: any, suggestion2: any) => {
+            const value1 = stringFunction(suggestion1);
+            const value2 = stringFunction(suggestion2);
+
+            if (value1 > value2) {
+                return 1;
+            }
+            else if (value1 < value2) {
+                return -1;
+            }
+            else {
+                return 0;
+            }
+        });
+    }
+
+    /**
+     * returns true, if param item is member of the array
+     * remark: null/undefined items in array are ignored, item = null/undefined is ignored
+     *
+     * @param array
+     * @param item
+     * @param idField
+     */
+    static arrayIncludes<T>(array: T[], item: T, idField: string): boolean {
+        return item && array.some((arrayItem: T) => arrayItem && (arrayItem as any)[idField] === (item as any)[idField]);
+    }
+
+    /**
+     * returns intersection of 2 row lists
+     * remark: null/undefined items in both array1 and array2 are ignored
+     *
+     * @param array1
+     * @param array2
+     * @param idField
+     */
+    static arrayIntersect<T>(array1: T[], array2: T[], idField: string): T[] {
+
+        const array2IdSet = new Set<any>();
+        for (const item of array2) {
+            if (item) {
+                array2IdSet.add((item as any)[idField]);
+            }
+        }
+
+        return array1.filter((item: T) => item && array2IdSet.has((item as any)[idField]));
+    }
+
+
+    // ************* XCustomFilter/XCustomFilterItem/DataTableSortMeta **************
+
+    // pomocna metodka - aby sme nemuseli v kode vypisovat {where: <filter>, params: {}}
+    static createCustomFilter(filter: string | undefined | null): XCustomFilterItem | undefined {
+        let customFilterItem: XCustomFilterItem | undefined = undefined;
+        if (filter) {
+            customFilterItem = {where: filter, params: {}};
+        }
+        return customFilterItem;
+    }
+
+    // pomocna metodka - konvertuje XCustomFilter -> XCustomFilterItem[]
+    static createCustomFilterItems(customFilter: XCustomFilter | undefined): XCustomFilterItem[] | undefined {
+        let customFilterItems: XCustomFilterItem[] | undefined = undefined;
+        if (customFilter) {
+            if (Array.isArray(customFilter)) {
+                customFilterItems = customFilter;
+            } else {
+                customFilterItems = [customFilter];
+            }
+        }
+        return customFilterItems;
+    }
+
+    // pomocna metodka - konvertuje sortField -> DataTableSortMeta[]
+    static createMultiSortMeta(sortField: string | DataTableSortMeta[] | undefined): DataTableSortMeta[] | undefined {
+        let multiSortMeta: DataTableSortMeta[] | undefined = undefined;
+        if (sortField) {
+            if (Array.isArray(sortField)) {
+                multiSortMeta = sortField;
+            }
+            else {
+                // default order is asc, supported is also value in form "<column name> desc"
+                let order: 1 | -1 = 1;
+                const fieldAndOrder: string[] = sortField.split(' ');
+                if (fieldAndOrder.length === 2) {
+                    sortField = fieldAndOrder[0];
+                    if (fieldAndOrder[1].toLowerCase() === "desc") {
+                        order = -1;
+                    }
+                }
+                multiSortMeta = [{field: sortField, order: order}];
+            }
+        }
+        return multiSortMeta;
+    }
+
+    // pomocna metodka
+    static filterAnd(...filters: (XCustomFilter | undefined)[]): XCustomFilterItem[] | undefined {
+        let customFilterItemsResult: XCustomFilterItem[] | undefined = undefined;
+        if (filters.length > 0) {
+            customFilterItemsResult = [];
+            for (const filter of filters) {
+                const customFilterItems: XCustomFilterItem[] | undefined = XUtilsCommon.createCustomFilterItems(filter);
+                if (customFilterItems) {
+                    customFilterItemsResult.push(...customFilterItems);
+                }
+            }
+        }
+        return customFilterItemsResult;
+    }
+
+    // pomocna metodka
+    // ak je idList prazdny, vytvori podmienku id IN (0) a nevrati ziadne zaznamy
+    static filterIdIn(idField: string, idList: number[]): XCustomFilter {
+        return {where: `[${idField}] IN (:...idList)`, params: {"idList": idList.length > 0 ? idList : [0]}};
     }
 
     static getDayName(date: Date | null | undefined): string | undefined {

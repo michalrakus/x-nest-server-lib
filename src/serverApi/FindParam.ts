@@ -33,7 +33,8 @@ export interface XCustomFilterItem {
     params: XParams;
 }
 
-// XCustomFilter is used only in frontend, to the backend is always sent the array XCustomFilterItem[], because we want it the same way like other attributes
+// XCustomFilter is used usually in frontend, to the backend is always sent the array XCustomFilterItem[], because we want it the same way like other attributes
+// but it is used sometimes also in backend, for example in statistical module
 export type XCustomFilter = XCustomFilterItem | XCustomFilterItem[];
 
 export interface XFullTextSearch {
@@ -44,6 +45,7 @@ export interface XFullTextSearch {
 }
 
 export enum XAggregateType {
+    Count = "COUNT", // used only by group by queries
     Min = "MIN",
     Max = "MAX",
     Sum = "SUM",
