@@ -44,17 +44,17 @@ export interface XFullTextSearch {
     matchMode: 'startsWith' | 'contains' | 'endsWith' | 'equals'; // zatial tieto (podmnozina z DataTableFilterMetaData), default bude 'contains'
 }
 
-export enum XAggregateType {
-    Count = "COUNT", // used only by group by queries
+export enum XAggregateFunction {
     Min = "MIN",
     Max = "MAX",
     Sum = "SUM",
     Avg = "AVG"
 }
 
-export interface XAggregateItem {
+// aggregate items used for lazy tables, for group by queries there is more complex XAggregateItem
+export interface XSimpleAggregateItem {
     field: string;
-    aggregateType: XAggregateType;
+    aggregateFunction: XAggregateFunction;
 }
 
 export interface FindParam {
@@ -67,7 +67,7 @@ export interface FindParam {
     multiSortMeta?: DataTableSortMeta[]; // typ []
     entity: string;
     fields?: string[];
-    aggregateItems?: XAggregateItem[];
+    aggregateItems?: XSimpleAggregateItem[];
 }
 
 // TODO - idealne spravit x-query-api.ts a tam supnut vsetky Request/Response typy ktore vytvaraju joiny, where podmienky (FindParam.ts, FindResult.ts, ...)

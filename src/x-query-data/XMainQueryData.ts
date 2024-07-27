@@ -105,27 +105,54 @@ export class XMainQueryData extends XQueryData {
     }
 
     private addCustomFilterItem(xCustomFilterItem: XCustomFilterItem) {
-        // example of xCustomFilterItem.filter: ([assocField1.field2] BETWEEN :value1 AND :value2) AND ([field3] IN (:...values3))
+        const [sqlExpWithAliases, xQueryData] = this.replacePathFieldQueryData(xCustomFilterItem.where);
+        xQueryData.addWhereItem(sqlExpWithAliases);
+        xQueryData.addParams(xCustomFilterItem.params);
+    }
+
+    replacePathFieldQueryData(sqlExpParam: string): [string, XQueryData] {
+        // example of sql expression (e.g. where condition or subselect):
+        // ([assocField1.field2] BETWEEN :value1 AND :value2) AND ([field3] IN (:...values3))
         // fields in [] will be replaced with <table alias>.<column>
-        let where: string = xCustomFilterItem.where;
+        let sqlExp: string = sqlExpParam;
         let match: string;
         let xQueryDataForItem: XQueryData | null = null;
-        while ((match = XUtilsCommon.findFirstMatch(/\[[a-zA-Z0-9_.]+\]/, where)) != null) {
+        while ((match = XUtilsCommon.findFirstMatch(/\[[a-zA-Z0-9_.]+\]/, sqlExp)) != null) {
             const filterField: string = match.substring(1, match.length - 1); // remove []
             const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(filterField);
             if (xQueryDataForItem === null) {
                 xQueryDataForItem = xQueryData;
             } else if (xQueryData !== xQueryDataForItem) {
-                throw `Custom filter (or custom filter item) "${xCustomFilterItem.where}" must use the same query for all fields (all fields must use the same OneToMany assoc or OneToMany assoc cannot be used). Please divide your custom filter into more custom filters in form of array [filter1, filter2, ...].`;
+                throw `Custom filter (or custom filter item) "${sqlExpParam}" must use the same query for all fields (all fields must use the same OneToMany assoc or OneToMany assoc cannot be used). Please divide your custom filter into more custom filters in form of array [filter1, filter2, ...].`;
             }
             const dbField: string = xQueryDataForItem.getFieldFromPathField(filterFieldNew);
-            where = where.replaceAll(match, dbField);
+            sqlExp = sqlExp.replaceAll(match, dbField);
         }
         if (xQueryDataForItem === null) {
-            throw `Custom filter (or custom filter item) "${xCustomFilterItem.where}" - no field was found. Example of custom filter: [fieldX] = :valueX`;
+            throw `Custom filter (or custom filter item) "${sqlExpParam}" - no field was found. Example of custom filter: [fieldX] = :valueX`;
         }
-        xQueryDataForItem.addWhereItem(where);
-        xQueryDataForItem.addParams(xCustomFilterItem.params);
+        return [sqlExp, xQueryDataForItem];
+    }
+
+    // api function
+    getDBFieldForPathField(pathField: string): string {
+        const [xQueryData, fieldNew]: [XQueryData, string] = this.getQueryForPathField(pathField);
+        return xQueryData.getFieldFromPathField(fieldNew);
+    }
+
+    // api function
+    replacePathField(pathFieldOrPathFieldExp: string): string {
+        // simple version returning only string (can be used as api function for application code)
+        // works for single path field as well as for expression with path fields (e.g. [assocA.attrB] = 'abc')
+        let sqlExp: string;
+        if (XUtilsCommon.isPathField(pathFieldOrPathFieldExp)) {
+            sqlExp = this.getDBFieldForPathField(pathFieldOrPathFieldExp);
+        }
+        else {
+            const [sqlExpWithAliases, xQueryData] = this.replacePathFieldQueryData(pathFieldOrPathFieldExp);
+            sqlExp = sqlExpWithAliases;
+        }
+        return sqlExp;
     }
 
     getQueryForPathField(pathField: string): [XQueryData, string] {

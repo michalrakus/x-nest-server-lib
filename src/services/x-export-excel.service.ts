@@ -58,7 +58,7 @@ export class XExportExcelService extends XExportService {
             cell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
-                fgColor: {argb: 'FFCCECFF'} // toto je svetlomodru background farba, absolutne netusim preco je zapisana vo fgColor
+                fgColor: {argb: 'FFCCECFF'} // toto je svetlomodra background farba, absolutne netusim preco je zapisana vo fgColor
             }
         });
     }

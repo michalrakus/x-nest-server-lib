@@ -63,16 +63,16 @@ export class XLazyDataTableService {
                     const dbField: string = xQueryData.getFieldFromPathField(fieldNew);
                     if (xQueryData.isMainQueryData()) {
                         // ako alias pouzivame aggregateItem.field, moze mat aj "." (napr. assoc1.field1), DB to zvlada ak sa pouziju `assoc1.field1`, mozno to bude treba prerobit
-                        selectQueryBuilder.addSelect(`${aggregateItem.aggregateType}(${dbField})`, aggregateItem.field);
+                        selectQueryBuilder.addSelect(`${aggregateItem.aggregateFunction}(${dbField})`, aggregateItem.field);
                     }
                     else {
                         // vytvorime subquery, pre kazdy field samostatne, ak by sme to chceli efektivnejsie, museli by sme urobit samostatny select
                         // ale tomuto samostatnemu selectu by sme museli komplikovane pridavat where podmienky z main query
                         const xSubQueryData: XSubQueryData = xQueryData as XSubQueryData;
-                        const selectSubQueryBuilder: SelectQueryBuilder<unknown> = xSubQueryData.createQueryBuilder(selectQueryBuilder, `${aggregateItem.aggregateType}(${dbField})`);
+                        const selectSubQueryBuilder: SelectQueryBuilder<unknown> = xSubQueryData.createQueryBuilder(selectQueryBuilder, `${aggregateItem.aggregateFunction}(${dbField})`);
                         // alias obsahuje "." !
                         // tu uz druhykrat pouzivame agregacnu funkciu - pre SUM, MIN, MAX je to ok, ale pri AVG to ovplyvni vysledok!
-                        selectQueryBuilder.addSelect(`${aggregateItem.aggregateType}(${selectSubQueryBuilder.getQuery()})`, aggregateItem.field);
+                        selectQueryBuilder.addSelect(`${aggregateItem.aggregateFunction}(${selectSubQueryBuilder.getQuery()})`, aggregateItem.field);
                     }
                 }
             }

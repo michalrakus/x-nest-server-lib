@@ -251,19 +251,19 @@ export class XUtilsCommon {
         }
     }
 
-    static arraySort(array: any[], fieldOrStringFunction: string | ((item: any) => string)): any[] {
+    static arraySort(array: any[], fieldOrValueFunction: string | ((item: any) => any)): any[] {
 
-        let stringFunction: ((item: any) => string);
-        if (typeof fieldOrStringFunction === 'string') {
-            stringFunction = (item: any) => item[fieldOrStringFunction];
+        let valueFunction: ((item: any) => string);
+        if (typeof fieldOrValueFunction === 'string') {
+            valueFunction = (item: any) => item[fieldOrValueFunction];
         }
         else {
-            stringFunction = fieldOrStringFunction;
+            valueFunction = fieldOrValueFunction;
         }
 
         return array.sort((suggestion1: any, suggestion2: any) => {
-            const value1 = stringFunction(suggestion1);
-            const value2 = stringFunction(suggestion2);
+            const value1 = valueFunction(suggestion1);
+            const value2 = valueFunction(suggestion2);
 
             if (value1 > value2) {
                 return 1;
@@ -376,6 +376,20 @@ export class XUtilsCommon {
     // ak je idList prazdny, vytvori podmienku id IN (0) a nevrati ziadne zaznamy
     static filterIdIn(idField: string, idList: number[]): XCustomFilter {
         return {where: `[${idField}] IN (:...idList)`, params: {"idList": idList.length > 0 ? idList : [0]}};
+    }
+
+    // helper
+    static createPathFieldExp(pathFieldOrPathFieldExp: string): string {
+        // if fieldOrPathFieldExp is only pathField (e.g. attrX or assocA.attrB) then make path field expression (enclose field into [])
+        if (XUtilsCommon.isPathField(pathFieldOrPathFieldExp)) {
+            pathFieldOrPathFieldExp = `[${pathFieldOrPathFieldExp}]`;
+        }
+        return pathFieldOrPathFieldExp;
+    }
+
+    // helper
+    static isPathField(pathFieldOrPathFieldExp: string): boolean {
+        return /^[a-zA-Z0-9_.]+$/.test(pathFieldOrPathFieldExp);
     }
 
     static getDayName(date: Date | null | undefined): string | undefined {
