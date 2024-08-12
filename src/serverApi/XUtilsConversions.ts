@@ -426,6 +426,12 @@ export function convertValueBase(fieldType: string, scale: number | undefined, v
             value = booleanAsUIText(value);
         }
     }
+    else if (fieldType === "jsonb") {
+        // konverziu z modelu (json objekt-u) netreba
+        if (asUI) {
+            value = XUtilsCommon.objectAsJSON(value);
+        }
+    }
     else {
         // vsetko ostatne
         if (asUI && asUI !== AsUIType.Excel) {

@@ -90,12 +90,13 @@ export abstract class XQueryData {
     createWhereItem(filterField: string, filterItem: DataTableFilterMetaData, paramIndex: number | undefined): string {
         let whereItem: string = "";
         if (this.isFilterItemNotNull(filterItem)) {
-            const field: string = this.getFieldFromPathField(filterField);
+            const dbField: string = this.getFieldFromPathField(filterField);
             // TODO - pouzit paramName :1, :2, :3, ... ?
-            let paramName: string = field; // paramName obsahuje "." (napr. t2.attrib)
+            let paramName: string = dbField; // paramName obsahuje "." (napr. t2.attrib)
             if (paramIndex !== undefined) {
                 paramName += "_" + paramIndex;
             }
+            const field: string = this.addDBCastIfNeeded(dbField, filterField);
             switch (filterItem.matchMode) {
                 case FilterMatchMode.STARTS_WITH:
                     whereItem = this.createWhereItemBaseLike(field, false, paramName, `${filterItem.value}%`);
@@ -220,6 +221,18 @@ export abstract class XQueryData {
             this.assocAliasMap.set(assoc, aliasForAssoc);
         }
         return aliasForAssoc;
+    }
+
+    addDBCastIfNeeded(dbField: string, field: string): string {
+        const xField: XField = this.xEntityMetadataService.getXFieldByPath(this.xEntity, field);
+        if (xField.type === "jsonb") {
+            // ak neprecastujeme typ jsonb, tak nam vyhodi chybu
+            // toto je potrebne ak chceme aby fungovalo jednoduche zadanie textu do filtra na stlpci ktory zobrazuje jsonb atribut
+            // (fts filter funguje s jsonb atributmi pekne aj bez tejto upravy (tam sa vzdy robi cast na ::VARCHAR))
+            // ak dbField castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
+            dbField = `(${dbField})::VARCHAR`;
+        }
+        return dbField;
     }
 
     addWhereItem(whereItem: string) {
