@@ -86,10 +86,18 @@ export class XEntityMetadataService {
         }
 
         columnMetadataList = entityMetadata.primaryColumns;
-        if (columnMetadataList.length !== 1) {
-            throw "Entity " + entityMetadata.name + " has 0 or more then 1 primary column";
+        let idField: string;
+        if (columnMetadataList.length === 0) {
+            throw "Entity " + entityMetadata.name + " has 0 primary column";
         }
-        const idField = columnMetadataList[0].propertyName;
+        else if (columnMetadataList.length === 1) {
+            idField = columnMetadataList[0].propertyName;
+        }
+        else {
+            // povolili sme composite PK, napr. specialna entita ZapisField
+            // dame takto, snad sa to nebude nikde pouzivat
+            idField = columnMetadataList.map((value: ColumnMetadata) => value.propertyName).join(", ");
+        }
 
         const assocMap: XAssocMap = this.createAssocMap([...entityMetadata.manyToOneRelations, ...entityMetadata.oneToOneRelations, ...entityMetadata.oneToManyRelations, ...entityMetadata.manyToManyRelations]);
         return {name: entityMetadata.name, idField: idField, fieldMap: fieldMap, assocMap: assocMap};
