@@ -202,6 +202,10 @@ export function dateAsYYYY_MM_DD(date: Date): string {
     return `${date.getFullYear()}-${monthStr}-${dayStr}`;
 }
 
+export function dateAsDB(date: Date | null): string {
+    return date !== null ? `'${dateAsYYYY_MM_DD(date)}'::DATE` : "NULL::DATE";
+}
+
 export function datetimeAsUI(value: Date | null): string {
     if (value !== null) {
         return dateFormat(value, datetimeFormatUI());
