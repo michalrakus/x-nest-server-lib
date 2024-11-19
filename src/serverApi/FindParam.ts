@@ -1,21 +1,4 @@
-import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
-
-// TODO - replaced with DataTableFilterMetaData
-// export interface FilterValue {
-//     value : string;
-//     matchMode : 'startsWith' | 'equals'; // matchMode ma konstanty napr. startsWith
-// }
-
-// TODO - replaced with DataTableFilterMeta
-// export interface Filters {
-//     [field: string]: FilterValue; // specialny typ pre object (dictionary) ktory ma dynamicky pocet propertiesov
-// }
-
-// TODO - replace with DataTableSortMeta
-// export interface SortMeta {
-//     field : string;
-//     order : 1 | -1; // hodnoty 1 alebo -1
-// }
+import {DataTableFilterMetaData, DataTableOperatorFilterMetaData, DataTableSortMeta} from "./PrimeFilterSortMeta";
 
 export enum ResultType {
     OnlyRowCount,
@@ -36,6 +19,25 @@ export interface XCustomFilterItem {
 // XCustomFilter is used usually in frontend, to the backend is always sent the array XCustomFilterItem[], because we want it the same way like other attributes
 // but it is used sometimes also in backend, for example in statistical module
 export type XCustomFilter = XCustomFilterItem | XCustomFilterItem[];
+
+// additional match modes (extension to primereact enum FilterMatchMode)
+export enum XFilterMatchMode {
+    X_AUTO_COMPLETE = 'xAutoComplete'
+}
+
+// in some special cases (e.g. match mode xAutoComplete) we use separated sql condition that is different from standard filter item (field, match mode, value)
+// filter item is needed for UI, but for for DB we use sometimes another (field, match mode, value) and for easier life we use the whole sql condition created on frontend
+export interface XDataTableFilterMetaData extends DataTableFilterMetaData {
+    customFilterItems?: XCustomFilterItem[];
+}
+
+// x version of primereact's DataTableFilterMeta
+export interface XDataTableFilterMeta {
+    /**
+     * Extra options.
+     */
+    [key: string]: XDataTableFilterMetaData | DataTableOperatorFilterMetaData;
+}
 
 export interface XFullTextSearch {
     fields?: string[]; // stlpce na ktorych sa vykona search, ak undefined, tak sa pouziju FindParam.fields
@@ -61,7 +63,7 @@ export interface FindParam {
     resultType: ResultType;
     first?: number;
     rows?: number; // page size
-    filters?: DataTableFilterMeta;
+    filters?: XDataTableFilterMeta;
     fullTextSearch?: XFullTextSearch;
     customFilterItems?: XCustomFilterItem[];
     multiSortMeta?: DataTableSortMeta[]; // typ []

@@ -3,7 +3,12 @@ import {XEntityMetadataService} from "../services/x-entity-metadata.service";
 import {OrderByCondition, SelectQueryBuilder} from "typeorm";
 import {XSubQueryData} from "./XSubQueryData";
 import {DataTableFilterMeta, DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
-import {XCustomFilterItem, XFullTextSearch} from "../serverApi/FindParam";
+import {
+    XCustomFilterItem,
+    XDataTableFilterMeta,
+    XDataTableFilterMetaData,
+    XFullTextSearch
+} from "../serverApi/FindParam";
 import {XAssoc, XEntity} from "../serverApi/XEntityMetadata";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 
@@ -35,13 +40,19 @@ export class XMainQueryData extends XQueryData {
 
     // ******************* methods for creating data in member variables  ********************
 
-    addFilters(filters: DataTableFilterMeta | undefined) {
+    addFilters(filters: XDataTableFilterMeta | undefined) {
         if (filters) {
             for (const [filterField, filterValue] of Object.entries(filters)) {
                 // test this.isFilterValueNotNull je tu hlavne na to aby sa nevytvarali zbytocne join-y pri SELECT COUNT(1)
                 if (this.isFilterValueNotNull(filterValue)) {
-                    const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(filterField);
-                    xQueryData.addFilterField(filterFieldNew, filterValue);
+                    if (!('operator' in filterValue) && (filterValue as XDataTableFilterMetaData).customFilterItems) {
+                        // for simple condition, if there is customFilterItems (used when autocomplete is used), we use customFilterItems
+                        this.addCustomFilterItems((filterValue as XDataTableFilterMetaData).customFilterItems);
+                    }
+                    else {
+                        const [xQueryData, filterFieldNew]: [XQueryData, string] = this.getQueryForPathField(filterField);
+                        xQueryData.addFilterField(filterFieldNew, filterValue);
+                    }
                 }
             }
         }

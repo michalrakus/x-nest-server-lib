@@ -1,7 +1,7 @@
 // ExportType a LazyDataTableQueryParam sa pouzivaju v samostatnom servise ktory data streamuje
 // (na rozdiel od ResultType.AllRows ktory by sa ani nemal pouzivat - nemali by sa vsetky rows tahat na klienta v jednom velkom requeste)
-import {DataTableFilterMeta, DataTableSortMeta} from "./PrimeFilterSortMeta";
-import {XCustomFilterItem, XFullTextSearch} from "./FindParam";
+import {DataTableSortMeta} from "./PrimeFilterSortMeta";
+import {XCustomFilterItem, XDataTableFilterMeta, XFullTextSearch} from "./FindParam";
 
 // ************** export ***************
 
@@ -28,7 +28,7 @@ export interface ExportJsonParam {
 }
 
 export interface LazyDataTableQueryParam {
-    filters: DataTableFilterMeta;
+    filters: XDataTableFilterMeta;
     fullTextSearch?: XFullTextSearch;
     customFilterItems?: XCustomFilterItem[];
     multiSortMeta?: DataTableSortMeta[]; // typ []
