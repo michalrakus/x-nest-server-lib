@@ -423,6 +423,11 @@ export class XUtilsCommon {
         }
         else if (date1 !== null && date2 !== null) {
             result = (date1.getTime() === date2.getTime());
+            // mali sme problem - funkcia dateFromModel() konvertovala string "2025-02-04" na Tue Feb 04 2025 01:00:00 GMT+0100 (Central European Standard Time)
+            // a XCalendar pri vykliknuti datumu vracal Tue Feb 04 2025 00:00:00 GMT+0100 (Central European Standard Time) -> opravili sme XCalendar
+            //result = date1.getFullYear() === date2.getFullYear()
+            //    && date1.getMonth() === date2.getMonth()
+            //    && date1.getDate() === date2.getDate();
         }
         return result;
     }
