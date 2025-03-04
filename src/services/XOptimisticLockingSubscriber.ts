@@ -10,7 +10,10 @@ export class XOptimisticLockingSubscriber implements EntitySubscriberInterface {
     beforeUpdate(event: UpdateEvent<any>) {
         // To know if an entity has a version number, we check if versionColumn
         // is defined in the metadatas of that entity.
-        if (event.metadata.versionColumn && event.entity) {
+        // if event.databaseEntity is undefined, then simple update is executed (not save) and we omit this check
+        // that's why only save method executes optimistic locking check
+        // however, update method also increments version column (TypeORM does it)
+        if (event.metadata.versionColumn && event.entity && event.databaseEntity) {
             // Getting the current version of the requested entity update
             const versionFromUpdate = Reflect.get(
                 event.entity,
