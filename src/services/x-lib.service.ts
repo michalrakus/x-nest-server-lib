@@ -17,7 +17,7 @@ import {RemoveRowParam} from "./RemoveRowParam";
 import * as bcrypt from 'bcrypt';
 import {FindParamRows} from "./FindParamRows";
 import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
-import {XEnvVar} from "./XEnvVars";
+import {XAuth, XEnvVar} from "./XEnvVars";
 import {join} from "path";
 import {unlinkSync} from "fs";
 import {XRowIdListToRemove} from "./XRowIdListToRemove";
@@ -473,16 +473,40 @@ export class XLibService {
     */
 
     async postLogin(reqUser: any, xPostLoginRequest: XPostLoginRequest): Promise<XPostLoginResponse> {
-        // audience "https://x-demo-server.herokuapp.com/"
-        const emailKey = XUtils.getEnvVarValue(XEnvVar.X_AUTH0_AUDIENCE) + 'email';
-        const userEmail: string = reqUser[emailKey];
-        if (userEmail === undefined) {
-            throw `Email of the current user was not found in access token. Email-key = ${emailKey}`;
+        let username: string;
+        if (XUtils.getEnvVarValue(XEnvVar.X_AUTH) === XAuth.OFF) {
+            username = xPostLoginRequest.username;
+        }
+        else if (XUtils.getEnvVarValue(XEnvVar.X_AUTH) === XAuth.AUTH0) {
+            // email (username) must be added in auth0.com to the access token
+            // how to do it: in auth0.com: Actions -> Triggers -> click post-login, then create custom action with this body:
+            /*
+            exports.onExecutePostLogin = async (event, api) => {
+                if (event.authorization) {
+                    api.accessToken.setCustomClaim('x-custom-claim-email', event.user.email);
+                    //console.log(`Logging user's email: ${event.user.email}`)
+                }
+            };
+            */
+            // and add action to the diagram of post-login using drag and drop
+
+            // original solution was:
+            //const emailKey = XUtils.getEnvVarValue(XEnvVar.X_AUTH0_AUDIENCE) + 'email'; <-- why to use audience?
+            const emailKey = 'x-custom-claim-email'; // new solution
+            username = reqUser[emailKey];
+            if (username === undefined) {
+                throw `Email of the current user was not found in access token. Email-key = ${emailKey}`;
+            }
+        }
+        else if (XUtils.getEnvVarValue(XEnvVar.X_AUTH) === XAuth.MS_ENTRA_ID) {
+            // toto sa pouziva pri AAD - preferred_username je podozrivy nazov ale nechcelo sa mi hladat nieco lepsie
+            //console.log(reqUser);
+            username = reqUser.preferred_username
         }
 
         const repository = this.dataSource.getRepository(XUser);
         const selectQueryBuilder: SelectQueryBuilder<XUser> = repository.createQueryBuilder("xUser");
-        selectQueryBuilder.where("xUser.username = :username", {username: userEmail});
+        selectQueryBuilder.where("xUser.username = :username", {username: username});
         const xUser: XUser | null = await selectQueryBuilder.getOne();
         // synchronizaciu udajov vypneme, lebo pri auth0 kontach nam prepisuje meno e-mailom
         // if (xUser !== null) {
