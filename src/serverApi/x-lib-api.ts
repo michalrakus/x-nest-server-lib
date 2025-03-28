@@ -7,3 +7,8 @@ export interface XGetSequenceValueRequest {
 export interface XGetSequenceValueResponse {
     value: number;
 }
+
+export interface XtRunDocTemplateRequest {
+    xtDocTemplateId: number;
+    rowId: number; // id of the row in DB that is going to be used for creating document from template
+}
