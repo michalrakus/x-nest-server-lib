@@ -22,7 +22,8 @@ export type XCustomFilter = XCustomFilterItem | XCustomFilterItem[];
 
 // additional match modes (extension to primereact enum FilterMatchMode)
 export enum XFilterMatchMode {
-    X_AUTO_COMPLETE = 'xAutoComplete'
+    X_AUTO_COMPLETE = 'xAutoComplete',
+    X_FILTER_ELEMENT = 'xFilterElement' // custom filter element (defined in filterElement property)
 }
 
 // in some special cases (e.g. match mode xAutoComplete) we use separated sql condition that is different from standard filter item (field, match mode, value)

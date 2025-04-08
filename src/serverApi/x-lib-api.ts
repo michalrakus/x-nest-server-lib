@@ -1,3 +1,5 @@
+import {XUser} from "./XUser";
+
 // misc api used in lib
 
 export interface XGetSequenceValueRequest {
@@ -11,4 +13,5 @@ export interface XGetSequenceValueResponse {
 export interface XtRunDocTemplateRequest {
     xtDocTemplateId: number;
     rowId: number; // id of the row in DB that is going to be used for creating document from template
+    xUser?: XUser; // current user
 }

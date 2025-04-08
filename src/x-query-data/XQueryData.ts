@@ -9,6 +9,7 @@ import {XEntityMetadataService} from "../services/x-entity-metadata.service";
 import {XEntity, XField} from "../serverApi/XEntityMetadata";
 import {stringAsDB} from "../serverApi/XUtilsConversions";
 import {XEnvVar} from "../services/XEnvVars";
+import {XDataTableFilterMetaData, XFilterMatchMode} from "../serverApi/FindParam";
 
 export abstract class XQueryData {
 
@@ -57,7 +58,10 @@ export abstract class XQueryData {
         // podmienka filterItem.value !== '' je workaround, spravne by bolo na frontende menit '' na null v onChange metode filter input-u
         // problem je, ze nemame custom input filter pre string atributy, museli by sme ho dorobit (co zas nemusi byt az taka hrozna robota)
         return filterItem.value !== null && filterItem.value !== ''
-                && !(filterItem.matchMode === FilterMatchMode.BETWEEN && Array.isArray(filterItem.value) && filterItem.value.length === 2 && filterItem.value[0] === null && filterItem.value[1] === null);
+                && !(filterItem.matchMode === FilterMatchMode.BETWEEN && Array.isArray(filterItem.value) && filterItem.value.length === 2 && filterItem.value[0] === null && filterItem.value[1] === null)
+                // toto je hotfix - je to tu koli tomu ze nevieme po zmene match mode vymazat hodnotu a v urcitych pripadoch pride na backend (matchMode = X_FILTER_ELEMENT && customFilterItems = undefined && value = "nieco") a spadne to
+                && !(filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_AUTO_COMPLETE && (filterItem as XDataTableFilterMetaData).customFilterItems === undefined)
+                && !(filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_FILTER_ELEMENT && (filterItem as XDataTableFilterMetaData).customFilterItems === undefined);
     }
 
     addFilterField(filterField: string, filterValue: DataTableFilterMetaData | DataTableOperatorFilterMetaData) {

@@ -25,6 +25,8 @@ import {XExportJsonService} from "./x-export-json.service";
 import {XExportCsvService} from "./x-export-csv.service";
 import {numberFromString} from "../serverApi/XUtilsConversions";
 import {DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
+import {XAssoc, XEntity} from "../serverApi/XEntityMetadata";
+import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -193,6 +195,20 @@ export class XLazyDataTableService {
             throw "findRowById - expected rows = 1, but found " + rows.length + " rows";
         }
         return rows[0];
+    }
+
+    // sorts all oneToMany assocs with cascade (insert and update) by id - it is default sorting used by XFormDataTable2 on the frontend
+    // helper method to avoid explicit sorting, used usually after XLazyDataTableService.findRowById
+    sortCascadeAssocsByIdField(xEntity: XEntity, row: any) {
+        const assocOneToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many"]).filter((assoc: XAssoc) => assoc.isCascadeInsert && assoc.isCascadeUpdate);
+        for (const assoc of assocOneToManyList) {
+            const assocRowList: any[] = row[assoc.name];
+            const xEntityAssoc: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
+            // not all associations must be read from DB (if join is missing that assocRowList is undefined)
+            if (assocRowList) {
+                row[assoc.name] = XUtilsCommon.arraySort(assocRowList, xEntityAssoc.idField);
+            }
+        }
     }
 
     // ************** podpora pre export ******************
