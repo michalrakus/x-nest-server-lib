@@ -7,8 +7,8 @@ import {
     ExportCsvParam,
     XMultilineExportType
 } from "../serverApi/ExportImportParam";
-import {dateFormat, XUtilsCommon} from "../serverApi/XUtilsCommon";
-import {numberFromModel} from "../serverApi/XUtilsConversions";
+import {XUtilsCommon} from "../serverApi/XUtilsCommon";
+import {dateFormat, datetimeFormat, numberFromModel} from "../serverApi/XUtilsConversions";
 // poznamka - ked tu bolo: import iconv from "iconv-lite"; tak to nefungovalo a zevraj to suvisi s nestjs
 import * as iconv from "iconv-lite";
 import {XExportColumn, XExportService} from "./x-export.service";
@@ -68,11 +68,11 @@ export class XCsvWriter {
         else if (value instanceof Date) {
             // TODO - ak pre datetime nastavime vsetky zlozky casu na 00:00:00, tak sformatuje hodnotu ako datum a spravi chybu pri zapise do DB - zapise  1:00:00
             if (value.getUTCHours() === 0 && value.getUTCMinutes() === 0 && value.getUTCSeconds() === 0) {
-                valueStr = dateFormat(value, 'yyyy-mm-dd');
+                valueStr = dateFormat(value, 'yyyy-MM-dd');
             }
             else {
                 // jedna sa o datetime
-                valueStr = dateFormat(value, 'yyyy-mm-dd HH:MM:ss');
+                valueStr = datetimeFormat(value, 'yyyy-MM-dd HH:mm:ss');
             }
         }
         else {

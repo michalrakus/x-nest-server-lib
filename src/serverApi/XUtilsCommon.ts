@@ -1,10 +1,10 @@
 import {XEntity, XField} from "./XEntityMetadata";
 import {XUtilsMetadataCommon} from "./XUtilsMetadataCommon";
-import {AsUIType, convertValue, dateAsYYYY_MM_DD} from "./XUtilsConversions";
+import {AsUIType, convertValue, dateAsYYYY_MM_DD, dateFormat, datetimeFormat} from "./XUtilsConversions";
 import {XCustomFilter, XCustomFilterItem} from "./FindParam";
 import {DataTableSortMeta} from "./PrimeFilterSortMeta";
 
-// funkcie spolocne pre Web i pre Server
+// common functions for frontend and backend
 export class XUtilsCommon {
 
     static newLine: string = '\n';
@@ -207,11 +207,11 @@ export class XUtilsCommon {
             // TODO - ak pre datetime nastavime vsetky zlozky casu na 00:00:00, tak sformatuje hodnotu ako datum a spravi chybu pri zapise do DB - zapise  1:00:00
             let dateStr: string;
             if (this.getHours() === 0 && this.getMinutes() === 0 && this.getSeconds() === 0) {
-                dateStr = dateFormat(this, 'yyyy-mm-dd');
+                dateStr = dateFormat(this, 'yyyy-MM-dd');
             }
             else {
                 // jedna sa o datetime
-                dateStr = dateFormat(this, 'yyyy-mm-dd HH:MM:ss');
+                dateStr = datetimeFormat(this, 'yyyy-MM-dd HH:mm:ss');
             }
             return dateStr;
         }
@@ -308,7 +308,6 @@ export class XUtilsCommon {
 
         return array1.filter((item: T) => item && array2IdSet.has((item as any)[idField]));
     }
-
 
     // ************* XCustomFilter/XCustomFilterItem/DataTableSortMeta **************
 
@@ -502,5 +501,3 @@ export class XUtilsCommon {
     }
 }
 
-// nevedel som importnut dateFormat, tak som to dal sem aby som nemusel vsade pouzivat require("dateformat")
-export const dateFormat = require("dateformat");

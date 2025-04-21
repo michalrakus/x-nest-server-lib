@@ -1,4 +1,4 @@
-import {dateFormat, XUtilsCommon} from "./XUtilsCommon";
+import {XUtilsCommon} from "./XUtilsCommon";
 import {XAssoc, XEntity, XField} from "./XEntityMetadata";
 import {XUtilsMetadataCommon} from "./XUtilsMetadataCommon";
 import {IPostgresInterval} from "postgres-interval";
@@ -191,28 +191,60 @@ export function dateAsUI(value: Date | null, dateScale: XDateScale = XDateScale.
 
 // specialna funkcia - konvertuje Date na string YYYY-MM-DD
 export function dateAsYYYY_MM_DD(date: Date): string {
-    let monthStr: string = (date.getMonth() + 1).toString();
-    if (monthStr.length < 2) {
-        monthStr = "0" + monthStr;
-    }
-    let dayStr: string = date.getDate().toString();
-    if (dayStr.length < 2) {
-        dayStr = "0" + dayStr;
-    }
-    return `${date.getFullYear()}-${monthStr}-${dayStr}`;
+    return dateFormat(date, 'yyyy-MM-dd');
 }
 
 export function dateAsDB(date: Date | null): string {
     return date !== null ? `'${dateAsYYYY_MM_DD(date)}'::DATE` : "NULL::DATE";
 }
 
+// the same like function format(this, 'yyyy-MM-dd');
+export function dateFormat(date: Date, format: string): string {
+    const pad = (num: number): string => num.toString().padStart(2, '0');
+
+    const year: number = date.getFullYear();
+    const month: string = pad(date.getMonth() + 1); // Months are zero-based
+    const day: string = pad(date.getDate());
+
+    let value: string = format;
+    value = value.replace('yyyy', `${year}`);
+    value = value.replace('MM', month);
+    value = value.replace('dd', day);
+
+    return value;
+}
+
 export function datetimeAsUI(value: Date | null): string {
     if (value !== null) {
-        return dateFormat(value, datetimeFormatUI());
+        return datetimeFormat(value, datetimeFormatUI());
     }
     else {
         return "";
     }
+}
+
+// the same like function format(this, 'yyyy-MM-dd HH:mm:ss');
+export function datetimeFormat(date: Date, format: string): string {
+    const pad = (num: number): string => num.toString().padStart(2, '0');
+
+    const year: number = date.getFullYear();
+    const month: string = pad(date.getMonth() + 1); // Months are zero-based
+    const day: string = pad(date.getDate());
+
+    const hours: string = pad(date.getHours());
+    const minutes: string = pad(date.getMinutes());
+    const seconds: string = pad(date.getSeconds());
+
+    let value: string = format;
+    value = value.replace('yyyy', `${year}`);
+    value = value.replace('MM', month);
+    value = value.replace('dd', day);
+
+    value = value.replace('HH', hours);
+    value = value.replace('mm', minutes);
+    value = value.replace('ss', seconds);
+
+    return value;
 }
 
 // provizorne zatial takato konverzia
@@ -245,10 +277,10 @@ export function timeFromModel(value: any): Date | null {
 export function dateFormatUI(dateScale: XDateScale = XDateScale.Date): string {
     let format: string;
     if (dateScale === XDateScale.Date) {
-        format = "dd.mm.yyyy";
+        format = "dd.MM.yyyy";
     }
     else if (dateScale === XDateScale.Month) {
-        format = "mm.yyyy";
+        format = "MM.yyyy";
     }
     else if (dateScale === XDateScale.Year) {
         format = "yyyy";
@@ -277,7 +309,7 @@ export function dateFormatCalendar(dateScale: XDateScale = XDateScale.Date): str
 }
 
 export function datetimeFormatUI(): string {
-    return "dd.mm.yyyy HH:MM:ss";
+    return "dd.MM.yyyy HH:mm:ss";
 }
 
 export function intervalFromUI(valueString: string): IPostgresInterval | null | undefined {
