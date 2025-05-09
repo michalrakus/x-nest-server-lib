@@ -421,7 +421,8 @@ export class XUtilsCommon {
             result = true;
         }
         else if (date1 !== null && date2 !== null) {
-            result = (date1.getTime() === date2.getTime());
+            // to avoid problems with time part, we use dateCompare
+            result = (XUtilsCommon.dateCompare(date1, date2) === 0);
             // mali sme problem - funkcia dateFromModel() konvertovala string "2025-02-04" na Tue Feb 04 2025 01:00:00 GMT+0100 (Central European Standard Time)
             // a XCalendar pri vykliknuti datumu vracal Tue Feb 04 2025 00:00:00 GMT+0100 (Central European Standard Time) -> opravili sme XCalendar
             //result = date1.getFullYear() === date2.getFullYear()
@@ -429,6 +430,26 @@ export class XUtilsCommon {
             //    && date1.getDate() === date2.getDate();
         }
         return result;
+    }
+
+    static dateIntersect(date1From: Date, date1To: Date, date2From: Date, date2To: Date): boolean {
+        return XUtilsCommon.dateCompare(date1From, date2To) <= 0 && XUtilsCommon.dateCompare(date2From, date1To) <= 0;
+    }
+
+    // because of time part, the usual compare (using <=) sometimes does not work correct
+    static dateCompare(date1: Date, date2: Date): number {
+        const dateOnly1: Date = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+        const dateOnly2: Date = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+        if (dateOnly1.getTime() < dateOnly2.getTime()) {
+            return -1;
+        }
+        else if (dateOnly1.getTime() === dateOnly2.getTime()) {
+            return 0;
+        }
+        else {
+            // dateOnly1 > dateOnly2
+            return 1;
+        }
     }
 
     // solution from internet
@@ -493,6 +514,19 @@ export class XUtilsCommon {
     // oprava:
     static today(): Date {
         return new Date(dateAsYYYY_MM_DD(new Date()));
+    }
+
+    static currentMonth(): Date {
+        return XUtilsCommon.dateAsMonth(XUtilsCommon.today())!;
+    }
+
+    static dateAsMonth(date: Date | null): Date | null {
+        let month: Date | null = null;
+        if (date !== null) {
+            month = new Date(date); // create copy not to change "date"
+            month.setUTCDate(1); // first day of month
+        }
+        return month;
     }
 
     // vrati true ak sa string sklada iba z cislic, moze mat + alebo - na zaciatku
