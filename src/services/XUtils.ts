@@ -2,6 +2,7 @@ import {XEnvVar} from "./XEnvVars";
 import {join} from "path";
 import {IPostgresInterval} from "postgres-interval";
 import {ValueTransformer} from "typeorm";
+import {XLocaleOptions} from "./XLocale";
 
 export class XUtils {
 
@@ -71,5 +72,15 @@ export class XUtils {
 
     static getSchema(): string {
         return XUtils.schema;
+    }
+
+    private static xLocaleOptions: XLocaleOptions | undefined = undefined;
+
+    static setXLocaleOptions(xLocaleOptions: XLocaleOptions) {
+        XUtils.xLocaleOptions = xLocaleOptions;
+    }
+
+    static getXLocaleOptions(): XLocaleOptions {
+        return XUtils.xLocaleOptions;
     }
 }

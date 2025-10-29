@@ -12,7 +12,6 @@ import {XEntityMetadataService} from "./x-entity-metadata.service";
 import {XEntityMap} from "../serverApi/XEntityMetadata";
 import {FindParam, XLazyAutoCompleteSuggestionsRequest} from "../serverApi/FindParam";
 import {FindParamRowsForAssoc} from "./FindParamRowsForAssoc";
-import {FindRowByIdParam} from "./FindRowByIdParam";
 import {SaveRowParam} from "./SaveRowParam";
 import {RemoveRowParam} from "./RemoveRowParam";
 import {XBrowseMetaMap} from "../serverApi/XBrowseMetadata";
@@ -21,7 +20,12 @@ import {Response} from 'express';
 import {ExportCsvParam, ExportExcelParam, ExportJsonParam} from "../serverApi/ExportImportParam";
 import {FindParamRows} from "./FindParamRows";
 import {XPostLoginRequest, XPostLoginResponse} from "../serverApi/XPostLoginIfc";
-import {XGetSequenceValueRequest, XGetSequenceValueResponse} from "../serverApi/x-lib-api";
+import {
+    XFindRowByIdRequest,
+    XFindRowByIdResponse,
+    XGetSequenceValueRequest,
+    XGetSequenceValueResponse, XUnlockRowRequest
+} from "../serverApi/x-lib-api";
 
 @Controller()
 export class XLibController {
@@ -83,14 +87,19 @@ export class XLibController {
         return await this.xLibService.findRows(body);
     }
 
-    @Post('findRowById')
-    async findRowById(@Body() body: FindRowByIdParam): Promise<any> {
+    @Post('x-find-row-by-id')
+    async findRowById(@Body() body: XFindRowByIdRequest): Promise<XFindRowByIdResponse> {
         return await this.xLazyDataTableService.findRowById(body);
     }
 
     @Post('saveRow')
     async saveRow(@Body() body: SaveRowParam): Promise<any> {
         return await this.xLibService.saveRow(body);
+    }
+
+    @Post('x-unlock-row')
+    async unlockRow(@Body() body: XUnlockRowRequest) {
+        await this.xLibService.unlockRow(body);
     }
 
     @Post('removeRow')

@@ -309,6 +309,32 @@ export class XUtilsCommon {
         return array1.filter((item: T) => item && array2IdSet.has((item as any)[idField]));
     }
 
+    // returns ids that are in idListA or in idListB but not in both lists
+    static numberArraySymmetricDiff(idListA: number[], idListB: number[]): number[] {
+        const setA = new Set(idListA);
+        const setB = new Set(idListB);
+
+        const result: number[] = [];
+
+        for (const id of setA) {
+            if (!setB.has(id)) {
+                result.push(id);
+            }
+        }
+
+        for (const id of setB) {
+            if (!setA.has(id)) {
+                result.push(id);
+            }
+        }
+
+        return result;
+    }
+
+    static numberArrayUnion(idListA: number[], idListB: number[]): number[] {
+        return Array.from(new Set([...idListA, ...idListB])); // new Set(...) removes duplicates automatically
+    }
+
     // ************* XCustomFilter/XCustomFilterItem/DataTableSortMeta **************
 
     // pomocna metodka - aby sme nemuseli v kode vypisovat {where: <filter>, params: {}}

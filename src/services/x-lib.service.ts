@@ -22,7 +22,10 @@ import {join} from "path";
 import {unlinkSync} from "fs";
 import {XRowIdListToRemove} from "./XRowIdListToRemove";
 import {XParam} from "../administration/x-param.entity";
-import {dateFromUI, intFromUI, numberFromModel} from "../serverApi/XUtilsConversions";
+import {dateFromModel, dateFromUI, datetimeAsUI, intFromUI, numberFromModel} from "../serverApi/XUtilsConversions";
+import {XUnlockRowRequest} from "../serverApi/x-lib-api";
+import {XAppError} from "./XAppError";
+import {xLocaleOption} from "./XLocale";
 
 @Injectable()
 export class XLibService {
@@ -84,6 +87,9 @@ export class XLibService {
     }
 
     async saveRowInTransaction(manager: EntityManager, row: SaveRowParam, fileListToRemove?: Array<string>): Promise<any> {
+
+        // first unlock the row if the entity uses pessimistic locking (lockDate !== null)
+        await this.unlockRowForSave(manager, row.entity, row.object);
 
         // saveRow sluzi aj pre insert (id-cko je undefined, TypeORM robi rovno insert)
         // aj pre update (id-cko je cislo, TypeORM najprv cez select zistuje ci dany zaznam existuje)
@@ -328,6 +334,72 @@ export class XLibService {
             }
             //console.log(`Succesfully removed file ${file}`);
         }
+    }
+
+    // this method is supposed to be called in transaction and before save of the "object" (method sets lockDate and lockXUser to null)
+    async unlockRowForSave(manager: EntityManager, entity: string, object: any) {
+
+        const lockDate: Date | null = dateFromModel(object.lockDate ?? null);
+        if (lockDate) {
+            const xEntity: XEntity = this.xEntityMetadataService.getXEntity(entity);
+            const rowId: number = object[xEntity.idField];
+            const rowFromDB: any = await this.findRowByIdForLocking(manager, entity, rowId);
+            // if the lock was not replaced by newer lock, remove the lock
+            // TODO - select also id of lockXUser and compare with lockXUser from request
+            const lockDateFromDB: Date | null = rowFromDB.lockDate;
+            if (lockDateFromDB && lockDateFromDB.getTime() === lockDate.getTime()) {
+                object.lockDate = null;
+                object.lockXUser = null;
+            }
+            else {
+                // someone overtook the lock (and may already finished the editing)
+                // we use exception to inform user (like by optimistic locking)
+                if (lockDateFromDB) {
+                    const rowFromDBWithUser: any = await this.findRowByIdWithAssoc(manager, entity, rowId, "lockXUser");
+                    throw new XAppError(xLocaleOption('pessimisticLockFailedLockPresent', {lockUser: rowFromDBWithUser.lockXUser?.name, lockDate: datetimeAsUI(lockDateFromDB)}));
+                }
+                else {
+                    // editing by other user has finished
+                    // TODO - check if attributes modifDate/modifXUser exist in entity
+                    const rowFromDBWithUser: any = await this.findRowByIdWithAssoc(manager, entity, rowId, "modifXUser");
+                    throw new XAppError(xLocaleOption('pessimisticLockFailedLockFinished', {modifUser: rowFromDBWithUser.modifXUser?.name, modifDate: datetimeAsUI(rowFromDBWithUser.modifDate)}));
+                }
+            }
+        }
+    }
+
+    // unlock row for cancel
+    async unlockRow(unlockRowRequest: XUnlockRowRequest) {
+        return this.dataSource.transaction(manager => this.unlockRowInTransaction(manager, unlockRowRequest));
+    }
+
+    private async unlockRowInTransaction(manager: EntityManager, unlockRowRequest: XUnlockRowRequest) {
+        const row: any = await this.findRowByIdForLocking(manager, unlockRowRequest.entity, unlockRowRequest.id);
+        // if the lock was not replaced by newer lock, remove the lock
+        // TODO - select also id of lockXUser and compare with lockXUser from request
+        const lockDateFromDB: Date | null = row.lockDate;
+        if (lockDateFromDB && lockDateFromDB.getTime() === dateFromModel(unlockRowRequest.lockDate).getTime()) {
+            row.lockDate = null;
+            row.lockXUser = null;
+            await manager.getRepository(unlockRowRequest.entity).save(row); // zatial dame save, lebo update inkrementuje version atribut
+        }
+    }
+
+    async findRowByIdForLocking(manager: EntityManager, entity: string, id: number): Promise<any> {
+        // simple select without outer joins (SELECT FOR UPDATE does not work if there is outer join in select (in postgres))
+        // TODO - optimalisation - select only attribute lockDate + id of lockXUser
+        const selectQueryBuilderForUpdate: SelectQueryBuilder<unknown> = manager.getRepository(entity).createQueryBuilder("t");
+        selectQueryBuilderForUpdate.whereInIds([id]);
+        selectQueryBuilderForUpdate.setLock("pessimistic_write"); // SELECT FOR UPDATE
+        return selectQueryBuilderForUpdate.getOneOrFail();
+    }
+
+    private async findRowByIdWithAssoc(manager: EntityManager, entity: string, id: number, assoc: string): Promise<any> {
+        // TODO - optimalisation - select only proper attributes
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = manager.getRepository(entity).createQueryBuilder("t");
+        selectQueryBuilder.leftJoinAndSelect(`t.${assoc}`, "t1");
+        selectQueryBuilder.whereInIds([id]);
+        return selectQueryBuilder.getOneOrFail();
     }
 
     /* old simple removeRow

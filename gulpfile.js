@@ -16,6 +16,7 @@ function generateApi(cb) {
         "./lib/auth/auth.module",
         "./lib/auth/jwt-auth.guard",
         "./lib/auth/public",
+        "./lib/locale/x-en",
         "./lib/serverApi/ExportImportParam",
         "./lib/serverApi/XUtilsCommon",
         "./lib/serverApi/XUtilsConversions",
@@ -40,6 +41,7 @@ function generateApi(cb) {
         "./lib/services/XAdvancedConsoleLogger",
         "./lib/services/XAppError",
         "./lib/services/XEnvVars",
+        "./lib/services/XLocale",
         "./lib/services/XOptimisticLockingSubscriber",
         "./lib/services/XUtils"
     ];

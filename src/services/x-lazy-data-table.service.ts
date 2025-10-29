@@ -1,13 +1,12 @@
 import {Injectable, StreamableFile} from '@nestjs/common';
 import {FindResult, XAggregateValues} from "../serverApi/FindResult";
-import {DataSource, SelectQueryBuilder} from "typeorm";
+import {DataSource, EntityManager, Repository, SelectQueryBuilder} from "typeorm";
 import {
     FindParam,
     ResultType, XCustomFilterItem,
     XFullTextSearch,
     XLazyAutoCompleteSuggestionsRequest
 } from "../serverApi/FindParam";
-import {FindRowByIdParam} from "./FindRowByIdParam";
 import {Response} from "express";
 import {
     ExportCsvParam,
@@ -27,6 +26,8 @@ import {numberFromString} from "../serverApi/XUtilsConversions";
 import {DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
 import {XAssoc, XEntity} from "../serverApi/XEntityMetadata";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
+import {XFindRowByIdRequest, XFindRowByIdResponse} from "../serverApi/x-lib-api";
+import {XLibService} from "./x-lib.service";
 
 @Injectable()
 export class XLazyDataTableService {
@@ -34,6 +35,7 @@ export class XLazyDataTableService {
     constructor(
         private readonly dataSource: DataSource,
         private readonly xEntityMetadataService: XEntityMetadataService,
+        private readonly xLibService: XLibService,
         private readonly xExportCsvService: XExportCsvService,
         private readonly xExportExcelService: XExportExcelService,
         private readonly xExportJsonService: XExportJsonService
@@ -127,7 +129,7 @@ export class XLazyDataTableService {
             xMainQueryData.addSelectItems(findParam.fields);
             xMainQueryData.addOrderByItems(findParam.multiSortMeta);
 
-            const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderFromXMainQuery(xMainQueryData);
+            const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderFromXMainQuery(null, xMainQueryData);
 
             if (findParam.resultType === ResultType.OnlyPagedRows || findParam.resultType === ResultType.RowCountAndPagedRows) {
                 selectQueryBuilder.skip(findParam.first);
@@ -147,17 +149,22 @@ export class XLazyDataTableService {
 
     // metoda hlavne na zjednotenie spolocneho kodu
     // TODO - nema ist do XMainQueryData? mal by ale potom aj vytvraranie query builder pre COUNT/SUM select by malo ist do XMainQueryData, zatial nechame
-    createQueryBuilderFromXMainQuery(xMainQueryData: XMainQueryData): SelectQueryBuilder<unknown> {
+    // for using in transaction, pass param manager, otherwise pass manager = null
+    createQueryBuilderFromXMainQuery(manager: EntityManager, xMainQueryData: XMainQueryData): SelectQueryBuilder<unknown> {
 
         // TODO - selectovat len stlpce ktore treba - nepodarilo sa, viac v TODO.txt
         // TODO - tabulky pridane pri vytvoreni xMainQueryData.orderByItems nemusime selectovat, staci ich joinovat, ale koli jednoduchosti ich tiez selectujeme
         // TODO - podobne aj tabulky pridane cez custom filter alebo cez full-text search ktory obsahuje ine stlpce ako su v browse - tie tiez nepotrebujeme selectovat,
         // t.j. netreba volat leftJoinAndSelect(field, alias), staci volat leftJoin(field, alias) - chcelo by to okrem alias-u si zapisovat aj ci treba aj select (boolean hodnotu)
-        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.dataSource.createQueryBuilder(xMainQueryData.xEntity.name, xMainQueryData.rootAlias);
+        // original code (before use manager/transaction) (there are some differences between using repository and not using repository)
+        //const selectQueryBuilder: SelectQueryBuilder<unknown> = this.dataSource.createQueryBuilder(xMainQueryData.xEntity.name, xMainQueryData.rootAlias);
+        const repository: Repository<unknown> = manager ? manager.getRepository(xMainQueryData.xEntity.name) : this.dataSource.getRepository(xMainQueryData.xEntity.name);
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = repository.createQueryBuilder(xMainQueryData.rootAlias);
+
         for (const [field, alias] of xMainQueryData.assocAliasMap.entries()) {
             selectQueryBuilder.leftJoinAndSelect(field, alias);
         }
-        // najoinujeme aj tabulky cez pridane cez oneToMany asociacie (lebo mozno potrebujeme nacitat fieldy z tychto tabuliek)
+        // najoinujeme aj tabulky pridane cez oneToMany asociacie (lebo mozno potrebujeme nacitat fieldy z tychto tabuliek)
         let where: string = xMainQueryData.where;
         let params: {} = xMainQueryData.params;
         for (const [assocOneToMany, xSubQueryData] of xMainQueryData.assocXSubQueryDataMap.entries()) {
@@ -182,19 +189,41 @@ export class XLazyDataTableService {
 
     // docasne sem dame findRowById, lebo pouzivame podobne joinovanie ako pri citani dat pre lazy tabulky
     // (v buducnosti mozme viac zjednotit s lazy tabulkou)
-    async findRowById(findParam: FindRowByIdParam): Promise<any> {
-
-        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findParam.entity, "t", undefined, undefined, undefined);
-        xMainQueryData.addSelectItems(findParam.fields);
-
-        const selectQueryBuilder : SelectQueryBuilder<unknown> = this.createQueryBuilderFromXMainQuery(xMainQueryData);
-        selectQueryBuilder.whereInIds([findParam.id])
-
-        const rows: any[] = await selectQueryBuilder.getMany();
-        if (rows.length !== 1) {
-            throw "findRowById - expected rows = 1, but found " + rows.length + " rows";
+    async findRowById(findRowRequest: XFindRowByIdRequest): Promise<XFindRowByIdResponse> {
+        // we use transaction only by locking (we spare the commands START TRANSACTION and COMMIT when we don't use transaction)
+        if (findRowRequest.lockDate) {
+            return this.dataSource.transaction(manager => this.findRowByIdWithLockInTransaction(manager, findRowRequest));
         }
-        return rows[0];
+        else {
+            const row: any = await this.findRowByIdBase(null, findRowRequest);
+            return {row: row, lockAcquired: false};
+        }
+    }
+
+    private async findRowByIdWithLockInTransaction(manager: EntityManager, findRowRequest: XFindRowByIdRequest): Promise<XFindRowByIdResponse> {
+        // we select the row in transaction, in order to use SELECT FOR UPDATE and write the lock (if the row is not locked)
+        const rowForUpdate: any = await this.xLibService.findRowByIdForLocking(manager, findRowRequest.entity, findRowRequest.id);
+        let lockAcquired: boolean = false;
+        if (rowForUpdate.lockDate === null || findRowRequest.overwriteLock) {
+            // row is not locked (or we do lock overwrite), put the lock
+            rowForUpdate.lockDate = findRowRequest.lockDate;
+            rowForUpdate.lockXUser = findRowRequest.lockXUser;
+            await manager.getRepository(findRowRequest.entity).save(rowForUpdate); // zatial dame save, lebo update inkrementuje version atribut (version ale pojde prec)
+            lockAcquired = true;
+        }
+
+        const row: any = await this.findRowByIdBase(manager, findRowRequest);
+        return {row: row, lockAcquired: lockAcquired};
+    }
+
+    private async findRowByIdBase(manager: EntityManager, findRowRequest: XFindRowByIdRequest): Promise<any> {
+        // select the whole row (also with assocs)
+        const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findRowRequest.entity, "t", undefined, undefined, undefined);
+        xMainQueryData.addSelectItems(findRowRequest.fields);
+
+        const selectQueryBuilder: SelectQueryBuilder<unknown> = this.createQueryBuilderFromXMainQuery(manager, xMainQueryData);
+        selectQueryBuilder.whereInIds([findRowRequest.id]);
+        return selectQueryBuilder.getOneOrFail();
     }
 
     // sorts all oneToMany assocs with cascade (insert and update) by id - it is default sorting used by XFormDataTable2 on the frontend
@@ -280,7 +309,7 @@ export class XLazyDataTableService {
         const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, queryParam.entity, "t", queryParam.filters, queryParam.fullTextSearch, queryParam.customFilterItems);
         xMainQueryData.addSelectItems(queryParam.fields);
         xMainQueryData.addOrderByItems(queryParam.multiSortMeta);
-        return [this.createQueryBuilderFromXMainQuery(xMainQueryData), xMainQueryData.assocXSubQueryDataMap.size > 0];
+        return [this.createQueryBuilderFromXMainQuery(null, xMainQueryData), xMainQueryData.assocXSubQueryDataMap.size > 0];
     }
 
     private createDefaultFieldsForFullTextSearch(fullTextSearch: XFullTextSearch | undefined, fields: string[] | undefined) {

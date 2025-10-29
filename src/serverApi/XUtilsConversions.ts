@@ -322,11 +322,16 @@ export function intervalFromUI(valueString: string): IPostgresInterval | null | 
     else {
         const posColon = valueString.indexOf(':');
         if (posColon === -1) {
-            let minutes: number = parseInt(valueString);
-            if (!isNaN(minutes)) {
-                const hours = Math.floor(minutes / 60);
-                minutes = minutes - (hours * 60);
-                valueInterval = {hours: hours, minutes: minutes} as IPostgresInterval;
+            // for depaul project, we use hours as default value - TODO - some param/env value to have both types of init value
+            // let minutes: number = parseInt(valueString);
+            // if (!isNaN(minutes)) {
+            //     const hours = Math.floor(minutes / 60);
+            //     minutes = minutes - (hours * 60);
+            //     valueInterval = {hours: hours, minutes: minutes} as IPostgresInterval;
+            // }
+            let hours: number = parseInt(valueString);
+            if (!isNaN(hours)) {
+                valueInterval = {hours: hours, minutes: 0} as IPostgresInterval;
             }
         }
         else {
