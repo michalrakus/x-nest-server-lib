@@ -1,5 +1,6 @@
 import {DataTableFilterMeta, DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
 
+// TODO - move to common (serverApi)
 export interface FindParamRows {
     entity: string;
     displayField?: string; // moze byt undefined, vtedy sa nepouziva

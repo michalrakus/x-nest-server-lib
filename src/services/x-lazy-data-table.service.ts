@@ -216,7 +216,7 @@ export class XLazyDataTableService {
         return {row: row, lockAcquired: lockAcquired};
     }
 
-    private async findRowByIdBase(manager: EntityManager, findRowRequest: XFindRowByIdRequest): Promise<any> {
+    async findRowByIdBase(manager: EntityManager, findRowRequest: XFindRowByIdRequest): Promise<any> {
         // select the whole row (also with assocs)
         const xMainQueryData: XMainQueryData = new XMainQueryData(this.xEntityMetadataService, findRowRequest.entity, "t", undefined, undefined, undefined);
         xMainQueryData.addSelectItems(findRowRequest.fields);
