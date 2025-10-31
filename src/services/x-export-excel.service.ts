@@ -65,7 +65,7 @@ export class XExportExcelService extends XExportService {
 
     async createStreamableFile(workbook: ExcelJS.Workbook): Promise<StreamableFile> {
         //const buffer: ExcelJS.Buffer = await workbook.xlsx.writeBuffer();
-        const buffer: Buffer = await workbook.xlsx.writeBuffer() as Buffer;
+        const buffer: Buffer = await workbook.xlsx.writeBuffer() as unknown as Buffer;
         //await workbook.xlsx.write(stream);
 
         return new StreamableFile(Readable.from(buffer));
