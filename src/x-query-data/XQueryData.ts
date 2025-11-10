@@ -252,22 +252,34 @@ export abstract class XQueryData {
     }
 
     addFtsField(prefix: string | null, ftsField: string) {
+        const dbField: string = this.getFieldFromPathField(ftsField);
         const xField: XField = this.xEntityMetadataService.getXFieldByPath(this.xEntity, ftsField);
-        let dbCast: string;
+        // TODO - add other conversions if needed
+        // TODO - create DB conversion functions if used on multiple places
+        let dbFieldWithCast: string;
         if (xField.type === "boolean") {
-            dbCast = "::INT::VARCHAR"; // nechceme vytvorit hodnoty |true| reps. |false|, radsej vytvorime |1| resp. |0|
+            // ak dbField castujeme cez ::VARCHAR (::INT), treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
+            dbFieldWithCast = `(${dbField})::INT::VARCHAR`; // nechceme vytvorit hodnoty |true| reps. |false|, radsej vytvorime |1| resp. |0|
                                         // - tie sa budu menej pliest s vyhladavaniami zameranymi na ine stlpce
         }
-        else {
-            dbCast = "::VARCHAR";
+        else if (xField.type === "decimal") {
+            // decimal attributes (financial sums) are displayed like: 123,45 - we change "." to ","
+            dbFieldWithCast = `replace((${dbField})::VARCHAR, '.', ',')`;
         }
-        const dbField: string = this.getFieldFromPathField(ftsField);
-        // TODO - konverzie
+        else if (xField.type === "date") {
+            dbFieldWithCast = `to_char(${dbField}, 'DD.MM.YYYY')`;
+        }
+        else if (xField.type === "datetime") {
+            dbFieldWithCast = `to_char(${dbField}, 'DD.MM.YYYY HH24:MI:SS')`;
+        }
+        else {
+            // ak dbField castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
+            dbFieldWithCast = `(${dbField})::VARCHAR`;
+        }
         // prefix (napr. RC pre rodne cislo) nam umoznuje zafixovat nejaku hodnotu vo vyhladavacom retazci na konkretny stlpec
         // napr. ak zadame RC801207, bude sa retazec 801207 hladat len medzi hodnotami zo stlpca rodne cislo
         const dbPrefix: string = prefix ? `'${prefix}' || ` : ``;
-        // ak dbField castujeme cez ::VARCHAR, treba ho uviest v zatvorkach, inac nam TypeORM neurobi replace na nazov stlpca
-        this.ftsFieldList.push(`coalesce(${dbPrefix}(${dbField})${dbCast}, '')`);
+        this.ftsFieldList.push(`coalesce(${dbPrefix}${dbFieldWithCast}, '')`);
     }
 
     // pouzivam ako separator namiesto space-u (' ') lebo space sa moze nachadzat v hodnotach
