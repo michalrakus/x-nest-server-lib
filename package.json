@@ -1,6 +1,6 @@
 {
   "name": "@michalrakus/x-nest-server-lib",
-  "version": "1.38.1",
+  "version": "1.38.2",
   "description": "",
   "scripts": {
     "clean": "rimraf lib",

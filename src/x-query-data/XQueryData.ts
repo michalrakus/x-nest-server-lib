@@ -57,11 +57,12 @@ export abstract class XQueryData {
     isFilterItemNotNull(filterItem: DataTableFilterMetaData): boolean {
         // podmienka filterItem.value !== '' je workaround, spravne by bolo na frontende menit '' na null v onChange metode filter input-u
         // problem je, ze nemame custom input filter pre string atributy, museli by sme ho dorobit (co zas nemusi byt az taka hrozna robota)
-        return filterItem.value !== null && filterItem.value !== ''
+        return (filterItem.value !== null && filterItem.value !== ''
                 && !(filterItem.matchMode === FilterMatchMode.BETWEEN && Array.isArray(filterItem.value) && filterItem.value.length === 2 && filterItem.value[0] === null && filterItem.value[1] === null)
                 // toto je hotfix - je to tu koli tomu ze nevieme po zmene match mode vymazat hodnotu a v urcitych pripadoch pride na backend (matchMode = X_FILTER_ELEMENT && customFilterItems = undefined && value = "nieco") a spadne to
                 && !(filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_AUTO_COMPLETE && (filterItem as XDataTableFilterMetaData).customFilterItems === undefined)
-                && !(filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_FILTER_ELEMENT && (filterItem as XDataTableFilterMetaData).customFilterItems === undefined);
+                && !(filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_FILTER_ELEMENT && (filterItem as XDataTableFilterMetaData).customFilterItems === undefined))
+                || filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_IS_NOT_NULL || filterItem.matchMode as XFilterMatchMode === XFilterMatchMode.X_IS_NULL;
     }
 
     addFilterField(filterField: string, filterValue: DataTableFilterMetaData | DataTableOperatorFilterMetaData) {
@@ -161,6 +162,12 @@ export abstract class XQueryData {
                     else {
                         console.log(`FilterMatchMode "${filterItem.matchMode}": value is expected to be array of length = 2`);
                     }
+                    break;
+                case XFilterMatchMode.X_IS_NOT_NULL as unknown as FilterMatchMode:
+                    whereItem = `${field} IS NOT NULL`;
+                    break;
+                case XFilterMatchMode.X_IS_NULL as unknown as FilterMatchMode:
+                    whereItem = `${field} IS NULL`;
                     break;
                 default:
                     console.log(`FilterMatchMode "${filterItem.matchMode}" not implemented`);

@@ -22,6 +22,8 @@ export type XCustomFilter = XCustomFilterItem | XCustomFilterItem[];
 
 // additional match modes (extension to primereact enum FilterMatchMode)
 export enum XFilterMatchMode {
+    X_IS_NOT_NULL = 'isNotNull',
+    X_IS_NULL = 'isNull',
     X_AUTO_COMPLETE = 'xAutoComplete',
     X_FILTER_ELEMENT = 'xFilterElement' // custom filter element (defined in filterElement property)
 }
