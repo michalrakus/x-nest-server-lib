@@ -8,7 +8,7 @@ on:
   #release:
   #  types: [published]
 
-# granular access token is used, this code is needed for Trusted Publishing (did not work, maybe in future will be used)
+# granular access token is used (expires in 90 days), this code is needed for Trusted Publishing (did not work, maybe in future will be used)
 #permissions:
 #  id-token: write  # Required for OIDC
 #  contents: read
@@ -19,18 +19,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       # Setup .npmrc file to publish to npm (without this step, the authorization for "npm publish" does not work)
       # why node 24.x? Node 24.x uses npm 11.5.1 or later - needed for Trusted Publishing (maybe in future will be used)
       - name: Setup .npmrc file
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24.x'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10
           run_install: true
