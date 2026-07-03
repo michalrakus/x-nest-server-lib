@@ -12,11 +12,29 @@ export class XExportExcelService extends XExportService {
 
     // simple api for custom export
     export(worksheetName: string, columns: XExportColumn[], entity: string | undefined, rows: any[]): Promise<StreamableFile> {
-        return this.exportBase(worksheetName, columns, true, XMultilineExportType.Singleline, undefined, entity, rows);
+        return this.exportBase(
+            worksheetName,
+            columns,
+            true,
+            undefined,
+            XMultilineExportType.Singleline,
+            undefined,
+            entity,
+            rows
+        );
     }
 
     // extended api for custom export
-    exportBase(worksheetName: string, columns: XExportColumn[], createHeaders: boolean, multilineExportType: XMultilineExportType, fieldsToDuplicateValues: string[] | undefined, entity: string | undefined, rows: any[]): Promise<StreamableFile> {
+    exportBase(
+        worksheetName: string,
+        columns: XExportColumn[],
+        createHeaders: boolean,
+        formatRow: (row: any, cell: ExcelJS.Cell, colNumber: number) => void | undefined,
+        multilineExportType: XMultilineExportType,
+        fieldsToDuplicateValues: string[] | undefined,
+        entity: string | undefined,
+        rows: any[]
+    ): Promise<StreamableFile> {
 
         const workbook: ExcelJS.Workbook = new ExcelJS.Workbook();
         const worksheet: ExcelJS.Worksheet = this.createWorksheet(workbook, worksheetName, createHeaders);
@@ -31,7 +49,14 @@ export class XExportExcelService extends XExportService {
             //convertObject(entity, row, true, AsUIType.Text); // pomeni row!
             const resultRowList: Array<Array<any>> = this.exportRow(columns, multilineExportType, fieldsToDuplicateValues, xEntity, row);
             for (const resultRow of resultRowList) {
-                worksheet.addRow(resultRow);
+                const excelRow: ExcelJS.Row = worksheet.addRow(resultRow);
+                if (formatRow) {
+                    // Iterate over all non-null cells in a row
+                    // warning - this not very effective because formatRow is called for every cell and should be called only once per one row - TODO - better api
+                    excelRow.eachCell((cell: ExcelJS.Cell, colNumber: number) => {
+                        formatRow(row, cell, colNumber);
+                    });
+                }
             }
         }
 
