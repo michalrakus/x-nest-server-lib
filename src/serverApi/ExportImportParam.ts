@@ -38,13 +38,13 @@ export interface LazyDataTableQueryParam {
 
 // params used by export to excel and to csv
 export interface ExcelCsvParam {
-    columns: ExportColumn[]; // array corresponds to queryParam.fields
+    columns: ExportColumnParam[]; // array corresponds to queryParam.fields
     createHeaders: boolean; // creates header row if true
     toManyAssocExportType: ToManyAssocExportType; // export toMany asociacii
     fieldsToDuplicateValues?: string[]; // (podmnozina LazyDataTableQueryParam.fields)
 }
 
-export interface ExportColumn {
+export interface ExportColumnParam {
     header?: string;
     width?: string; // width of the column, e.g. '7.75rem', '20rem', '125px', used only for excel
     contentType?: XContentType; // for now used only for excel (in future can be used also for csv)

@@ -9,7 +9,7 @@ import {
 } from "../serverApi/FindParam";
 import {Response} from "express";
 import {
-    ExportColumn,
+    ExportColumnParam,
     ExportCsvParam,
     ExportExcelParam,
     ExportJsonParam,
@@ -251,13 +251,13 @@ export class XLazyDataTableService {
 
         const columns: XExportColumn[] = [];
         for (const [index, field] of exportExcelParam.queryParam.fields.entries()) {
-            const exportColumn: ExportColumn = exportExcelParam.excelCsvParam.columns[index];
-            const cssWidth: string | undefined = exportColumn.width; // e.g. '7.75rem' or '250px'
+            const exportColumnParam: ExportColumnParam = exportExcelParam.excelCsvParam.columns[index];
+            const cssWidth: string | undefined = exportColumnParam.width; // e.g. '7.75rem' or '250px'
             const width: number | undefined = cssWidth ? this.xExportExcelService.cssWidthToExcelWidth(cssWidth) : undefined;
             columns.push({
-                header: exportColumn.header ?? "",
+                header: exportColumnParam.header ?? "",
                 field: field,
-                contentType: exportColumn.contentType,
+                contentType: exportColumnParam.contentType,
                 width: width
             });
         }
@@ -278,9 +278,9 @@ export class XLazyDataTableService {
 
         const columns: XExportColumn[] = [];
         for (const [index, field] of exportCsvParam.queryParam.fields.entries()) {
-            const exportColumn: ExportColumn = exportCsvParam.excelCsvParam.columns[index];
+            const exportColumnParam: ExportColumnParam = exportCsvParam.excelCsvParam.columns[index];
             columns.push({
-                header: exportColumn.header ?? "",
+                header: exportColumnParam.header ?? "",
                 field: field
             });
         }
