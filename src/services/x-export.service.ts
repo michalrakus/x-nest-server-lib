@@ -1,10 +1,11 @@
-import {XMultilineExportType} from "../serverApi/ExportImportParam";
+import {ToManyAssocExportType} from "../serverApi/ExportImportParam";
 import {XEntity, XField} from "../serverApi/XEntityMetadata";
 import {XUtilsMetadataCommon} from "../serverApi/XUtilsMetadataCommon";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
 import {AsUIType, convertValueBase} from "../serverApi/XUtilsConversions";
 import {SelectQueryBuilder} from "typeorm";
 import {RawSqlResultsToEntityTransformer} from "typeorm/query-builder/transformer/RawSqlResultsToEntityTransformer";
+import {XContentType} from "../serverApi/x-lib-api";
 
 // struktury pouzivane pre export do excelu a do csv
 
@@ -17,13 +18,14 @@ export interface XExportColumn {
     header: string;
     field: string | ((row: any) => any);
     type?: XFieldType; // explicitne zadany typ - pouziva sa, ak nemame metadatovy XField
+    contentType?: XContentType; // text format (multiline/html) - used for texts (type string)
     width?: number;
 }
 
 export abstract class XExportService {
 
     // funkcia pouzivana v XExportExcelService a XExportCsvService
-    exportRow(columns: XExportColumn[], multilineExportType: XMultilineExportType, fieldsToDuplicateValues: string[] | undefined, xEntity: XEntity | undefined, row: any): Array<Array<any>> {
+    exportRow(columns: XExportColumn[], toManyAssocExportType: ToManyAssocExportType, fieldsToDuplicateValues: string[] | undefined, xEntity: XEntity | undefined, row: any): Array<Array<any>> {
 
         // vytvarany excel/csv row je tvoreny stlpcami - standardne ma stlpec presne 1 hodnotu,
         // ak sa vsak jedna o field dotahovany cez one-to-many asociaciu, ma dany stlpec vsetky hodnoty dotiahnute cez danu asociaciu (moze byt aj 0 hodnot)
@@ -58,7 +60,7 @@ export abstract class XExportService {
             if (Array.isArray(value)) {
                 columnValues = value;
 
-                if (multilineExportType === XMultilineExportType.Singleline) {
+                if (toManyAssocExportType === ToManyAssocExportType.Singleline || toManyAssocExportType === ToManyAssocExportType.Multiline) {
                     // zlucime vsetky hodnoty do jednej string hodnoty
                     if (fieldType) {
                         // TODO - ak nemame k dispozicii metadata, tak nam moze chybat scale
@@ -69,9 +71,10 @@ export abstract class XExportService {
                         // nepozname typ, neni dobre takto to pouzivat, vzdy by mal byt zadany typ
                         columnValues = columnValues.map((value: any) => (value !== null && value !== undefined) ? value.toString() : "");
                     }
-                    // columnValues je pole string-ov, mozme zlucit
-                    columnValues = [columnValues.join(", ")];
-                    // dalsiu konverziu uz nechceme
+                    // columnValues is string array, we can join the values
+                    const separator: string = toManyAssocExportType === ToManyAssocExportType.Singleline ? ", " : "\n";
+                    columnValues = [columnValues.join(separator)];
+                    // suppress next conversion
                     columnValuesProcessed = true;
                 }
             } else {

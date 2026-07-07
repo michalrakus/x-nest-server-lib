@@ -2,6 +2,7 @@
 // (na rozdiel od ResultType.AllRows ktory by sa ani nemal pouzivat - nemali by sa vsetky rows tahat na klienta v jednom velkom requeste)
 import {DataTableSortMeta} from "./PrimeFilterSortMeta";
 import {XCustomFilterItem, XDataTableFilterMeta, XFullTextSearch} from "./FindParam";
+import {XContentType} from "./x-lib-api";
 
 // ************** export ***************
 
@@ -14,7 +15,6 @@ export enum ExportType {
 export interface ExportExcelParam {
     queryParam: LazyDataTableQueryParam;
     excelCsvParam: ExcelCsvParam;
-    widths: string[]; // sirky stlpcov v tvare napr. ['7.75rem', '20rem', '8.5rem', '8.5rem', '6rem']
 }
 
 export interface ExportCsvParam {
@@ -36,18 +36,25 @@ export interface LazyDataTableQueryParam {
     fields: string[];
 }
 
-// parametre pouzivane pri exporte do excelu a do csv
+// params used by export to excel and to csv
 export interface ExcelCsvParam {
-    headers?: string[]; // ak je undefined, tak nevytvori header line
-    toManyAssocExport: XMultilineExportType; // export toMany asociacii
-    multilineTextExport: XMultilineExportType; // export viacriadkovych textov (contentType = multiline/html)
+    columns: ExportColumn[]; // array corresponds to queryParam.fields
+    createHeaders: boolean; // creates header row if true
+    toManyAssocExportType: ToManyAssocExportType; // export toMany asociacii
     fieldsToDuplicateValues?: string[]; // (podmnozina LazyDataTableQueryParam.fields)
 }
 
-// exportovanie hodnot z toMany asociacii, pripadne viacriadkovych textov
-export enum XMultilineExportType {
-    Singleline = "singleline", // hodnoty sa pospajaju do jednej dlhej hodnoty
-    Multiline = "multiline", // hodnoty sa zapisu pod seba do stlpca
+export interface ExportColumn {
+    header?: string;
+    width?: string; // width of the column, e.g. '7.75rem', '20rem', '125px', used only for excel
+    contentType?: XContentType; // for now used only for excel (in future can be used also for csv)
+}
+
+// exporting values from toMany associations
+export enum ToManyAssocExportType {
+    Singleline = "singleline", // values are joined into one long text, separated by comma ","
+    Multiline = "multiline", // values are written under each other into column, all values are in one cell separated by new line (works only for excel)
+    Multirow = "multirow", // values are written under each other into column, every value has separated cell/row
     Off = "off" // stlpce obsahujuce viac hodnot/riadkov sa vynechaju z exportu
 }
 

@@ -9,6 +9,7 @@ import {
 } from "../serverApi/FindParam";
 import {Response} from "express";
 import {
+    ExportColumn,
     ExportCsvParam,
     ExportExcelParam,
     ExportJsonParam,
@@ -22,7 +23,6 @@ import {XExportColumn} from "./x-export.service";
 import {XExportExcelService} from "./x-export-excel.service";
 import {XExportJsonService} from "./x-export-json.service";
 import {XExportCsvService} from "./x-export-csv.service";
-import {numberFromString} from "../serverApi/XUtilsConversions";
 import {DataTableSortMeta} from "../serverApi/PrimeFilterSortMeta";
 import {XAssoc, XEntity} from "../serverApi/XEntityMetadata";
 import {XUtilsCommon} from "../serverApi/XUtilsCommon";
@@ -251,22 +251,23 @@ export class XLazyDataTableService {
 
         const columns: XExportColumn[] = [];
         for (const [index, field] of exportExcelParam.queryParam.fields.entries()) {
-            const header: string = exportExcelParam.excelCsvParam.headers ? exportExcelParam.excelCsvParam.headers[index] : "";
-            let width: number | undefined = undefined;
-            const widthStr: string | undefined = exportExcelParam.widths[index]; // prichadza napr. '7.75rem'
-            if (widthStr && widthStr.endsWith('rem')) {
-                width = numberFromString(widthStr.substring(0, widthStr.length - 'rem'.length)) ?? undefined;
-                width = width ? width * 1.1 : undefined; // stlpce pre datumy su uzke, tak este prenasobime bulharskou konstantou
-            }
-            columns.push({header: header, field: field, width: width});
+            const exportColumn: ExportColumn = exportExcelParam.excelCsvParam.columns[index];
+            const cssWidth: string | undefined = exportColumn.width; // e.g. '7.75rem' or '250px'
+            const width: number | undefined = cssWidth ? this.xExportExcelService.cssWidthToExcelWidth(cssWidth) : undefined;
+            columns.push({
+                header: exportColumn.header ?? "",
+                field: field,
+                contentType: exportColumn.contentType,
+                width: width
+            });
         }
 
         return this.xExportExcelService.exportBase(
             exportExcelParam.queryParam.entity,
             columns,
-            exportExcelParam.excelCsvParam.headers !== undefined,
+            exportExcelParam.excelCsvParam.createHeaders,
             undefined,
-            exportExcelParam.excelCsvParam.toManyAssocExport,
+            exportExcelParam.excelCsvParam.toManyAssocExportType,
             exportExcelParam.excelCsvParam.fieldsToDuplicateValues,
             exportExcelParam.queryParam.entity,
             rowList
@@ -277,8 +278,11 @@ export class XLazyDataTableService {
 
         const columns: XExportColumn[] = [];
         for (const [index, field] of exportCsvParam.queryParam.fields.entries()) {
-            const header: string = exportCsvParam.excelCsvParam.headers ? exportCsvParam.excelCsvParam.headers[index] : "";
-            columns.push({header: header, field: field});
+            const exportColumn: ExportColumn = exportCsvParam.excelCsvParam.columns[index];
+            columns.push({
+                header: exportColumn.header ?? "",
+                field: field
+            });
         }
 
         const [selectQueryBuilder, existsToManyAssoc]: [SelectQueryBuilder<unknown>, boolean] = this.createSelectQueryBuilder(exportCsvParam.queryParam);
