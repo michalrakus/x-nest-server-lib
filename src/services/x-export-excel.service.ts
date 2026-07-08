@@ -23,7 +23,7 @@ export class XExportExcelService extends XExportService {
             columns,
             true,
             undefined,
-            ToManyAssocExportType.Singleline,
+            ToManyAssocExportType.Multiline,
             undefined,
             entity,
             rows
