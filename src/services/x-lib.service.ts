@@ -110,12 +110,25 @@ export class XLibService {
             delete row.object.__x_generatedRowId; // v pripade ze objekt vraciame klientovi (reload === true), nechceme tam __x_generatedRowId
         }
 
-        let assocOneToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many"]);
+        const assocOneToManyList: XAssoc[] = this.xEntityMetadataService.getXAssocList(xEntity, ["one-to-many"]);
         const rowId = row.object[xEntity.idField];
         const insert: boolean = (rowId === undefined);
-        assocOneToManyList = assocOneToManyList.filter(insert ? (assoc: XAssoc) => assoc.isCascadeInsert : (assoc: XAssoc) => assoc.isCascadeUpdate);
+        const assocOneToManyWithoutCascadeList: XAssoc[] = assocOneToManyList.filter(insert ? (assoc: XAssoc) => !(assoc.isCascadeInsert) : (assoc: XAssoc) => !(assoc.isCascadeUpdate));
+        const assocOneToManyWithCascadeList: XAssoc[] = assocOneToManyList.filter(insert ? (assoc: XAssoc) => assoc.isCascadeInsert : (assoc: XAssoc) => assoc.isCascadeUpdate);
 
-        for (const assoc of assocOneToManyList) {
+        // by default, TypeORM changes the rows of the child table of @OneToMany assoc (e.g. sets FK column to null)
+        // - TypeORM saves the associated rows into DB even if cascade is not used (similar like by @ManyToOne associations)
+        // (adding cascade causes that also the values of attributes of the child rows are saved)
+        // unintended saving @OneToMany associations caused problem if child entity was saved separately (main entity sometimes overwrited the FK column of child entity)
+        // (we also save some selects :-)
+
+        // warning: cleaning @OneToMany assoc can cause problem by reload row (returning inserted/updated row from dialog of the autocomplete component),
+        // the @OneToMany assoc of the returned row will be undefined and if the assoc is used in autocomplete, then we have a problem (but it is very rare case)
+        for (const assoc of assocOneToManyWithoutCascadeList) {
+            row.object[assoc.name] = undefined;
+        }
+
+        for (const assoc of assocOneToManyWithCascadeList) {
             const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
             // uprava toho co prislo z klienta - vynullujeme umelo vytvorene id-cka
@@ -143,7 +156,7 @@ export class XLibService {
         if (!insert) {
             // kedze nam chyba "remove orphaned entities" na asociaciach s detailami, tak ho zatial musime odprogramovat rucne
             // asi je to jedno ci pred save alebo po save (ak po save, tak cascade "remove" musi byt vypnuty - nefuguje ale tento remove zbehne skor)
-            for (const assoc of assocOneToManyList) {
+            for (const assoc of assocOneToManyWithCascadeList) {
                 const xChildEntity: XEntity = this.xEntityMetadataService.getXEntity(assoc.entityName);
 
                 const idList: any[] = [];
