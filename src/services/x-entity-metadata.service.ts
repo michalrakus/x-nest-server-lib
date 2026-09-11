@@ -34,8 +34,14 @@ export class XEntityMetadataService {
     private getXEntityForEntityMetadata(entityMetadata: EntityMetadata): XEntity {
 
         const fieldMap: XFieldMap = {};
-        // entityMetadata.columns obsahuje aj asociacie (napr. ManyToOne), preto ich vyfiltrujeme
-        let columnMetadataList: ColumnMetadata[] = entityMetadata.columns.filter((columnMetadata: ColumnMetadata) => columnMetadata.relationMetadata?.relationType === undefined);
+        // entityMetadata.columns columns contain also (virtual?) columns added by TypeORM for associations
+        // (e.g. ManyToOne assoc adds column with the same name as the name of the assoc)
+        // we want only simple columns (not columns added by assoc) -> that's why filter columnMetadata.relationMetadata === undefined
+        // very special case is if we have simple column and ManyToOne assoc both over the same column - we want that such column stays
+        // -> that's why filter columnMetadata.relationMetadata.propertyName !== columnMetadata.propertyName (assoc has different name then the column)
+        let columnMetadataList: ColumnMetadata[] = entityMetadata.columns.filter(
+            (columnMetadata: ColumnMetadata) => columnMetadata.relationMetadata === undefined
+                                                        || columnMetadata.relationMetadata.propertyName !== columnMetadata.propertyName);
         for (const columnMetadata of columnMetadataList) {
             const fieldName = columnMetadata.propertyName;
             // if (entityMetadata.name === 'Zmluva') {
