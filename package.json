@@ -17,7 +17,8 @@
   "author": "Michal Rakus",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22",
+    "pnpm": ">=11"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
