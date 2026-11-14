@@ -65,5 +65,22 @@ CREATE TABLE <schema>.x_file (
 ALTER TABLE <schema>.x_file ADD FOREIGN KEY (modif_x_user_id) REFERENCES <schema>.x_user (id);
 CREATE INDEX ON <schema>.x_file (modif_x_user_id);
 
+-- rows audit (turn the audit on via @Audit() on particular entity)
+CREATE TABLE <schema>.x_audit_row (
+    id SERIAL PRIMARY KEY,
+    entity VARCHAR(128) NOT NULL,
+    row_id INT NOT NULL,
+    modif_date TIMESTAMP NOT NULL,
+    modif_x_user_id INT,
+    removed BOOLEAN NOT NULL DEFAULT false,
+    row_data JSONB
+);
+
+CREATE INDEX ON <schema>.x_audit_row (entity, row_id, modif_date DESC);
+CREATE INDEX ON <schema>.x_audit_row (entity, removed, modif_date DESC);
+ALTER TABLE <schema>.x_audit_row ADD FOREIGN KEY (modif_x_user_id) REFERENCES <schema>.x_user (id);
+CREATE INDEX ON <schema>.x_audit_row (modif_x_user_id);
+
+
 -- funkcia na odstranenie diakritiky pouzivana vo full-text search (treba ju volat: <schema>.unaccent(<VARCHAR>))
 CREATE EXTENSION unaccent schema <schema>;

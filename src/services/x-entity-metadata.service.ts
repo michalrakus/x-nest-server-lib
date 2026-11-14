@@ -5,6 +5,7 @@ import {RelationMetadata} from "typeorm/metadata/RelationMetadata";
 import {ColumnMetadata} from "typeorm/metadata/ColumnMetadata";
 import {MixedList} from "typeorm/common/MixedList";
 import {XUtilsMetadataCommon} from "../serverApi/XUtilsMetadataCommon";
+import {isAuditedEntityName} from "./Audit";
 
 @Injectable()
 export class XEntityMetadataService {
@@ -106,7 +107,7 @@ export class XEntityMetadataService {
         }
 
         const assocMap: XAssocMap = this.createAssocMap([...entityMetadata.manyToOneRelations, ...entityMetadata.oneToOneRelations, ...entityMetadata.oneToManyRelations, ...entityMetadata.manyToManyRelations]);
-        return {name: entityMetadata.name, idField: idField, fieldMap: fieldMap, assocMap: assocMap};
+        return {name: entityMetadata.name, idField: idField, fieldMap: fieldMap, assocMap: assocMap, audited: isAuditedEntityName(entityMetadata.name)};
     }
 
     private createAssocMap(relationMetadataList: RelationMetadata[]): XAssocMap {

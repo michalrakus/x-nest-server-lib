@@ -102,6 +102,11 @@ export class XLibController {
         await this.xLibService.unlockRow(body);
     }
 
+    @Post('x-audit-row-data')
+    async getAuditRowData(@Body() body: {id: number}): Promise<any | null> {
+        return await this.xLibService.getAuditRowData(body.id);
+    }
+
     @Post('removeRow')
     async removeRow(@Body() body: RemoveRowParam) {
 //        try {

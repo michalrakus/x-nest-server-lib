@@ -7,6 +7,7 @@ export interface XEntity {
     idField: string;
     fieldMap: XFieldMap;
     assocMap: XAssocMap;
+    audited?: boolean; // true if the entity class is decorated with @Audit()
 }
 
 export interface XFieldMap {

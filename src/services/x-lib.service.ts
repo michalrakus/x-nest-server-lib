@@ -26,6 +26,8 @@ import {dateFromModel, dateFromUI, datetimeAsUI, intFromUI, numberFromModel} fro
 import {XUnlockRowRequest} from "../serverApi/x-lib-api";
 import {XAppError} from "./XAppError";
 import {xLocaleOption} from "./XLocale";
+import {XAuditRow} from "../administration/x-audit-row.entity";
+import {isAuditedEntityName, toAuditRowData} from "./Audit";
 
 @Injectable()
 export class XLibService {
@@ -192,7 +194,7 @@ export class XLibService {
                     //await repository.remove(rowList);
                     const rowIdList: any[] = rowList.map(row => row[xChildEntity.idField]);
                     // tato metodka vymaze aj pripadne asociovane objekty (metodka funguje pre *toMany asociacie ako aj pre *toOne asociacie)
-                    await this.removeRowsInTransaction(manager, xChildEntity, rowIdList, fileListToRemove);
+                    await this.removeRowsInTransaction(manager, xChildEntity, rowIdList, fileListToRemove, undefined, row.object.modifXUser);
                     // delete vykona priamo DELETE FROM, na rozdiel od remove, ktory najprv SELECT-om overi ci dane zaznamy existuju v DB
                     //await repository.delete(rowIdList);
                 }
@@ -205,6 +207,14 @@ export class XLibService {
         //const date = row.object.carDate;
         //console.log(typeof date);
         const objectReloaded: any = await repository.save(row.object);
+
+        if (isAuditedEntityName(xEntity.name)) {
+            const savedRowId: any = objectReloaded[xEntity.idField];
+            if (savedRowId !== undefined && savedRowId !== null) {
+                // snapshot is the saved object (the form sends the full row)
+                await this.insertAuditRow(manager, xEntity.name, savedRowId, false, toAuditRowData(objectReloaded), row.object.modifDate, row.object.modifXUser);
+            }
+        }
 
         return row.reload ? objectReloaded : {};
     }
@@ -238,10 +248,10 @@ export class XLibService {
         // asi by nebolo od veci v buducnosti prejst na cascade delete realizovany v DB cez FK constrainty, ked sa preto v TypeORM rozhodli...
 
         const xEntity: XEntity = this.xEntityMetadataService.getXEntity(row.entity);
-        return this.removeRowsInTransaction(manager, xEntity, [row.id], fileListToRemove, row.assocsToRemove);
+        return this.removeRowsInTransaction(manager, xEntity, [row.id], fileListToRemove, row.assocsToRemove, row.modifXUser);
     }
 
-    async removeRowsInTransaction(manager: EntityManager, xEntity: XEntity, rowIdList: any[], fileListToRemove?: Array<string>, assocsToRemove?: string[]) {
+    async removeRowsInTransaction(manager: EntityManager, xEntity: XEntity, rowIdList: any[], fileListToRemove?: Array<string>, assocsToRemove?: string[], modifXUser?: any) {
         // vygenerujeme query - jednym selectom nacitame cely strom zaznamov ktory ideme vymazat
         // prejdeme rekurzivne cez vsetky asociacie ktore maju nastaveny cascade "remove"
         const alias: string = "t";
@@ -263,15 +273,77 @@ export class XLibService {
             }
 
             // vymazeme nazbierane id-cka
-            for (const rowIdList of rowIdListToRemove.entityRowIdListList) {
-                await this.deleteRows(manager, rowIdList.entity, rowIdList.rowIdList);
+            for (const entityRowIdList of rowIdListToRemove.entityRowIdListList) {
+                await this.writeRemovedAuditRows(manager, entityRowIdList.entity, entityRowIdList.rowIdList, modifXUser);
+                await this.deleteRows(manager, entityRowIdList.entity, entityRowIdList.rowIdList);
             }
         }
         else {
             // optimalizacia
             // nepridali sme ani 1 leftJoin, netreba robit SELECT celeho stromu, usetrime ho a ideme priamo na delete
+            await this.writeRemovedAuditRows(manager, xEntity.name, rowIdList, modifXUser);
             await this.deleteRows(manager, xEntity.name, rowIdList);
         }
+    }
+
+    private async writeRemovedAuditRows(manager: EntityManager, entity: string, rowIdList: any[], modifXUser?: any): Promise<void> {
+        if (!isAuditedEntityName(entity)) {
+            return;
+        }
+        const modifDate: Date = new Date();
+        for (const rowId of rowIdList) {
+            if (rowId === undefined || rowId === null) {
+                continue;
+            }
+            // removed row keeps no copy of the data - the last update snapshot is already stored
+            await this.insertAuditRow(manager, entity, rowId, true, null, modifDate, modifXUser);
+        }
+    }
+
+    private async insertAuditRow(manager: EntityManager, entity: string, rowId: any, removed: boolean, rowData: any, modifDate: any, modifXUser: any): Promise<void> {
+        const auditRow: XAuditRow = new XAuditRow();
+        auditRow.entity = entity;
+        auditRow.rowId = rowId;
+        auditRow.removed = removed;
+        auditRow.rowData = removed ? null : rowData;
+        auditRow.modifDate = this.toAuditDate(modifDate);
+        auditRow.modifXUser = modifXUser?.id != null ? {id: modifXUser.id} as XUser : null;
+        await manager.getRepository(XAuditRow).save(auditRow);
+    }
+
+    private toAuditDate(value: any): Date {
+        if (value instanceof Date && !isNaN(value.getTime())) {
+            return value;
+        }
+        if (typeof value === "string" || typeof value === "number") {
+            const date: Date = new Date(value);
+            if (!isNaN(date.getTime())) {
+                return date;
+            }
+        }
+        return new Date();
+    }
+
+    // rowData of the given audit row; for a removed marker (rowData null) the previous snapshot of the same business row
+    async getAuditRowData(id: number): Promise<any | null> {
+        const repository = this.dataSource.getRepository(XAuditRow);
+        const auditRow: XAuditRow | null = await repository.createQueryBuilder("xAuditRow")
+            .addSelect("xAuditRow.rowData")
+            .where("xAuditRow.id = :id", {id: id})
+            .getOne();
+        if (auditRow === null) {
+            throw new XAppError(`Audit row ${id} was not found.`);
+        }
+        if (auditRow.rowData != null) {
+            return auditRow.rowData;
+        }
+        const previous: XAuditRow | null = await repository.createQueryBuilder("xAuditRow")
+            .addSelect("xAuditRow.rowData")
+            .where("xAuditRow.entity = :entity AND xAuditRow.rowId = :rowId AND xAuditRow.rowData IS NOT NULL", {entity: auditRow.entity, rowId: auditRow.rowId})
+            .orderBy("xAuditRow.modifDate", "DESC")
+            .addOrderBy("xAuditRow.id", "DESC")
+            .getOne();
+        return previous?.rowData ?? null;
     }
 
     addAssocsOfEntity(selectQueryBuilder: SelectQueryBuilder<unknown>, xEntity: XEntity, alias: string, assocsToRemove?: string[]): boolean {
